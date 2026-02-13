@@ -1,0 +1,147 @@
+*vim-mcp-server.txt*	MCP server for Vim	*vim-mcp-server*
+
+CONTENTS                                        *mcp-server-contents*
+
+    1. Introduction .............. |mcp-server-introduction|
+    2. Requirements .............. |mcp-server-requirements|
+    3. Commands .................. |mcp-server-commands|
+    4. Options ................... |mcp-server-options|
+    5. Tools ..................... |mcp-server-tools|
+    6. Endpoint .................. |mcp-server-endpoint|
+
+==============================================================================
+1. Introduction                                 *mcp-server-introduction*
+
+vim-mcp-server embeds a Model Context Protocol (MCP) server inside Vim.
+It exposes a set of tools over HTTP that allow MCP-compatible clients
+(such as AI coding agents) to read and modify Vim buffers, move the
+cursor, retrieve visual selections, and execute Ex commands.
+
+The server runs on a background thread using Python 3 and listens on
+localhost.  All buffer operations are safely dispatched to Vim's main
+thread.
+
+==============================================================================
+2. Requirements                                 *mcp-server-requirements*
+
+- Vim compiled with |+python3|.
+
+==============================================================================
+3. Commands                                     *mcp-server-commands*
+
+                                                *:McpServerStart*
+:McpServerStart [port]
+    Start the MCP server.  An optional [port] argument sets the
+    listening port for this invocation.  When omitted, the port is
+    determined by |g:mcp_server_port| (default 8765).
+
+    The server binds to 127.0.0.1 and is only accessible from the
+    local machine.
+
+                                                *:McpServerStop*
+:McpServerStop
+    Stop the MCP server and release the listening port.  The server
+    is also stopped automatically when Vim exits.
+
+                                                *:McpServerStatus*
+:McpServerStatus
+    Print whether the MCP server is running, and if so, the URL of
+    the endpoint.
+
+==============================================================================
+4. Options                                      *mcp-server-options*
+
+                                                *g:mcp_server_port*
+g:mcp_server_port
+    Port number the server listens on.  Default: 8765.
+
+    Can be overridden per-invocation by passing a port argument to
+    |:McpServerStart|.
+>
+        let g:mcp_server_port = 9000
+<
+
+                                                *g:mcp_server_autostart*
+g:mcp_server_autostart
+    When set to 1, the MCP server starts automatically after Vim
+    finishes loading (on |VimEnter|).  Default: 0.
+>
+        let g:mcp_server_autostart = 1
+<
+
+                                                *g:mcp_server_allow_execute*
+g:mcp_server_allow_execute
+    When set to 1, the `execute_command` tool is enabled, allowing
+    MCP clients to run arbitrary Ex commands.  This is disabled by
+    default for safety.  Default: 0.
+>
+        let g:mcp_server_allow_execute = 1
+<
+
+==============================================================================
+5. Tools                                        *mcp-server-tools*
+
+The following tools are exposed to MCP clients via the `tools/list`
+method.  Each tool can be invoked by a client through the `tools/call`
+method.  When a tool accepts a buffer argument, it can be specified as
+a buffer number (integer) or a file path (string); when omitted, the
+current buffer is used.
+
+list_buffers                                    *mcp-tool-list_buffers*
+    List all open buffers.  Returns buffer number, file path,
+    modified status, whether the buffer is active, and line count.
+
+get_buffer                                      *mcp-tool-get_buffer*
+    Read the contents of a buffer.  Optionally restrict to a range
+    of lines (1-based, inclusive).
+
+edit_buffer                                     *mcp-tool-edit_buffer*
+    Modify lines in a buffer.  Supports replacing a range of lines,
+    inserting lines at a position, or deleting lines.
+
+open_file                                       *mcp-tool-open_file*
+    Open a file in Vim using |:edit|.  If the file is already open,
+    switches to that buffer.
+
+save_buffer                                     *mcp-tool-save_buffer*
+    Save a buffer to disk using |:write|.
+
+close_buffer                                    *mcp-tool-close_buffer*
+    Close a buffer using |:bdelete|.  Supports a force option to
+    discard unsaved changes.
+
+get_cursor                                      *mcp-tool-get_cursor*
+    Get the current cursor position (buffer, line, column).
+
+set_cursor                                      *mcp-tool-set_cursor*
+    Move the cursor to a specific line and column.
+
+get_visual_selection                            *mcp-tool-get_visual_selection*
+    Get the current or last visual selection, including the selected
+    text, selection type (characterwise, linewise, or blockwise),
+    and start/end positions.
+
+execute_command                                 *mcp-tool-execute_command*
+    Execute an arbitrary Vim Ex command.  Disabled by default; see
+    |g:mcp_server_allow_execute|.
+
+==============================================================================
+6. Endpoint                                     *mcp-server-endpoint*
+
+The server listens for MCP JSON-RPC requests at:
+>
+    POST http://127.0.0.1:{port}/mcp
+<
+Supported MCP methods:
+
+    initialize              Handshake and capability negotiation.
+    notifications/initialized
+                            Client acknowledgement (no response).
+    tools/list              List available tools.
+    tools/call              Invoke a tool by name.
+    ping                    Health check.
+
+Sending a DELETE request to the same URL ends the session.
+
+==============================================================================
+ vim:tw=78:ts=8:ft=help:norl:
