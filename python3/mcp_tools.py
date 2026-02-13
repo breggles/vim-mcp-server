@@ -154,6 +154,20 @@ TOOL_DEFINITIONS = {
             "additionalProperties": False,
         },
     },
+    "get_visual_selection": {
+        "description": (
+            "Get the current or last visual selection in Vim. Returns the "
+            "selected text, the selection type (v for characterwise, V for "
+            "linewise, ctrl-v for blockwise), and the start/end positions. "
+            "If Vim is currently in visual mode, returns the active selection. "
+            "Otherwise, returns the last visual selection."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+    },
     "execute_command": {
         "description": (
             "Execute an arbitrary Vim Ex command. This is a powerful escape hatch. "
@@ -205,6 +219,8 @@ def execute_on_main_thread(vim, func_name, args):
         return _exec_get_cursor(vim)
     if func_name == "set_cursor":
         return _exec_set_cursor(vim, args)
+    if func_name == "get_visual_selection":
+        return _exec_get_visual_selection(vim)
     if func_name == "execute_command":
         return _exec_execute_command(vim, args)
     return {"error": f"Unknown tool: {func_name}"}
@@ -315,6 +331,47 @@ def _exec_set_cursor(vim, args):
     col = args.get("column", 1)
     vim.current.window.cursor = (line, col - 1)
     return f"Cursor moved to line {line}, column {col}"
+
+
+_VISUAL_MODES = {"v", "V", "\x16", "vs", "Vs", "\x16s"}
+
+_VISUAL_TYPE_NAMES = {
+    "v": "characterwise",
+    "V": "linewise",
+    "\x16": "blockwise",
+}
+
+
+def _exec_get_visual_selection(vim):
+    mode = vim.eval("mode()")
+    if mode in _VISUAL_MODES:
+        start = vim.eval("getpos('v')")
+        end = vim.eval("getpos('.')")
+        lines = vim.eval(f"getregion(getpos('v'), getpos('.'), #{{ type: mode() }})")
+        sel_type = mode.rstrip("s")
+    else:
+        sel_type = vim.eval("visualmode()")
+        if not sel_type:
+            return json.dumps({"error": "No visual selection available"})
+        start = vim.eval("getpos(\"'<\")")
+        end = vim.eval("getpos(\"'>\")")
+        if start[1] == "0" and end[1] == "0":
+            return json.dumps({"error": "No visual selection marks set"})
+        lines = vim.eval(
+            "getregion(getpos(\"'<\"), getpos(\"'>\"), #{ type: visualmode() })"
+        )
+    start_line = int(start[1])
+    start_col = int(start[2])
+    end_line = int(end[1])
+    end_col = int(end[2])
+    if start_line > end_line or (start_line == end_line and start_col > end_col):
+        start_line, start_col, end_line, end_col = end_line, end_col, start_line, start_col
+    return json.dumps({
+        "type": _VISUAL_TYPE_NAMES.get(sel_type, sel_type),
+        "text": "\n".join(lines),
+        "start": {"line": start_line, "column": start_col},
+        "end": {"line": end_line, "column": end_col},
+    })
 
 
 def _exec_execute_command(vim, args):
