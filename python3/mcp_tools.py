@@ -1,0 +1,334 @@
+import json
+import uuid
+
+import mcp_vim_bridge
+
+
+TOOL_DEFINITIONS = {
+    "list_buffers": {
+        "description": (
+            "List all open buffers in Vim. Returns buffer number, file path, "
+            "whether the buffer is modified, whether the buffer is the "
+            "active buffer, and line count for each buffer."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+    },
+    "get_buffer": {
+        "description": (
+            "Read the contents of a buffer. Specify the buffer by number or "
+            "file path. Optionally restrict to a line range (1-based, inclusive)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "buffer": {
+                    "type": ["integer", "string"],
+                    "description": (
+                        "Buffer number (integer) or file path (string). "
+                        "Use 0 or omit to read the current buffer."
+                    ),
+                },
+                "start_line": {
+                    "type": "integer",
+                    "description": "First line to read (1-based, inclusive). Omit to start from line 1.",
+                },
+                "end_line": {
+                    "type": "integer",
+                    "description": "Last line to read (1-based, inclusive). Omit to read to end of buffer.",
+                },
+            },
+            "additionalProperties": False,
+        },
+    },
+    "edit_buffer": {
+        "description": (
+            "Modify lines in a buffer. Supports replacing a range of lines, "
+            "inserting lines at a position, or deleting lines. Line numbers are "
+            "1-based and inclusive."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "buffer": {
+                    "type": ["integer", "string"],
+                    "description": "Buffer number or file path. Use 0 or omit for the current buffer.",
+                },
+                "action": {
+                    "type": "string",
+                    "enum": ["replace", "insert", "delete"],
+                    "description": (
+                        "'replace': replace lines start_line..end_line with new_lines. "
+                        "'insert': insert new_lines after the given start_line (0 to insert at top). "
+                        "'delete': delete lines start_line..end_line."
+                    ),
+                },
+                "start_line": {
+                    "type": "integer",
+                    "description": "First line of the range (1-based). For insert, the line after which to insert (0 = top).",
+                },
+                "end_line": {
+                    "type": "integer",
+                    "description": "Last line of the range (1-based, inclusive). Required for replace and delete.",
+                },
+                "new_lines": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Lines to insert or replace with. Required for replace and insert.",
+                },
+            },
+            "required": ["action", "start_line"],
+            "additionalProperties": False,
+        },
+    },
+    "open_file": {
+        "description": "Open a file in Vim using :edit. If the file is already open, switches to that buffer.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Absolute or relative file path to open.",
+                },
+            },
+            "required": ["path"],
+            "additionalProperties": False,
+        },
+    },
+    "save_buffer": {
+        "description": "Save a buffer to disk using :write.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "buffer": {
+                    "type": ["integer", "string"],
+                    "description": "Buffer number or file path. Use 0 or omit for the current buffer.",
+                },
+            },
+            "additionalProperties": False,
+        },
+    },
+    "close_buffer": {
+        "description": "Close a buffer using :bdelete. If the buffer has unsaved changes, use force=true to discard them.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "buffer": {
+                    "type": ["integer", "string"],
+                    "description": "Buffer number or file path. Use 0 or omit for the current buffer.",
+                },
+                "force": {
+                    "type": "boolean",
+                    "description": "Force close even if buffer has unsaved changes. Default false.",
+                },
+            },
+            "additionalProperties": False,
+        },
+    },
+    "get_cursor": {
+        "description": "Get the current cursor position: buffer number, line (1-based), and column (1-based).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+    },
+    "set_cursor": {
+        "description": "Move the cursor to a specific line and column in the current buffer.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "line": {
+                    "type": "integer",
+                    "description": "Line number (1-based).",
+                },
+                "column": {
+                    "type": "integer",
+                    "description": "Column number (1-based). Defaults to 1.",
+                },
+            },
+            "required": ["line"],
+            "additionalProperties": False,
+        },
+    },
+    "execute_command": {
+        "description": (
+            "Execute an arbitrary Vim Ex command. This is a powerful escape hatch. "
+            "Must be explicitly enabled via g:mcp_server_allow_execute (disabled by default)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "The Vim Ex command to execute (e.g. '%s/foo/bar/g').",
+                },
+            },
+            "required": ["command"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+
+def _resolve_buffer(vim, buf_arg):
+    if buf_arg is None or buf_arg == 0 or buf_arg == "":
+        return vim.current.buffer
+    if isinstance(buf_arg, int):
+        try:
+            return vim.buffers[buf_arg]
+        except KeyError:
+            return None
+    for b in vim.buffers:
+        if b.name == buf_arg or b.name.replace("\\", "/").endswith(buf_arg.replace("\\", "/")):
+            return b
+    return None
+
+
+def execute_on_main_thread(vim, func_name, args):
+    if func_name == "list_buffers":
+        return _exec_list_buffers(vim)
+    if func_name == "get_buffer":
+        return _exec_get_buffer(vim, args)
+    if func_name == "edit_buffer":
+        return _exec_edit_buffer(vim, args)
+    if func_name == "open_file":
+        return _exec_open_file(vim, args)
+    if func_name == "save_buffer":
+        return _exec_save_buffer(vim, args)
+    if func_name == "close_buffer":
+        return _exec_close_buffer(vim, args)
+    if func_name == "get_cursor":
+        return _exec_get_cursor(vim)
+    if func_name == "set_cursor":
+        return _exec_set_cursor(vim, args)
+    if func_name == "execute_command":
+        return _exec_execute_command(vim, args)
+    return {"error": f"Unknown tool: {func_name}"}
+
+
+def _exec_list_buffers(vim):
+    buffers = []
+    current_number = vim.current.buffer.number
+    for b in vim.buffers:
+        if not int(vim.eval(f"buflisted({b.number})")):
+            continue
+        buffers.append({
+            "number": b.number,
+            "name": b.name or "[No Name]",
+            "modified": bool(int(vim.eval(f"getbufvar({b.number}, '&modified')"))),
+            "active": b.number == current_number,
+            "line_count": len(b),
+        })
+    return json.dumps(buffers, indent=2)
+
+
+def _exec_get_buffer(vim, args):
+    buf = _resolve_buffer(vim, args.get("buffer"))
+    if buf is None:
+        return {"error": "Buffer not found"}
+    start = args.get("start_line")
+    end = args.get("end_line")
+    if start is None:
+        start = 1
+    if end is None:
+        end = len(buf)
+    start = max(1, start)
+    end = min(len(buf), end)
+    lines = buf[start - 1:end]
+    numbered = []
+    for i, line in enumerate(lines, start=start):
+        numbered.append(f"{i}: {line}")
+    header = f"Buffer {buf.number}: {buf.name or '[No Name]'} ({len(buf)} lines)"
+    return header + "\n" + "\n".join(numbered)
+
+
+def _exec_edit_buffer(vim, args):
+    buf = _resolve_buffer(vim, args.get("buffer"))
+    if buf is None:
+        return {"error": "Buffer not found"}
+    action = args.get("action")
+    start = args.get("start_line")
+    end = args.get("end_line")
+    new_lines = args.get("new_lines")
+    if action == "replace":
+        if new_lines is None:
+            return {"error": "new_lines is required for replace"}
+        if end is None:
+            return {"error": "end_line is required for replace"}
+        buf[start - 1:end] = new_lines
+        return f"Replaced lines {start}-{end} with {len(new_lines)} lines"
+    if action == "insert":
+        if new_lines is None:
+            return {"error": "new_lines is required for insert"}
+        buf[start:start] = new_lines
+        return f"Inserted {len(new_lines)} lines after line {start}"
+    if action == "delete":
+        if end is None:
+            return {"error": "end_line is required for delete"}
+        del buf[start - 1:end]
+        return f"Deleted lines {start}-{end}"
+    return {"error": f"Unknown action: {action}"}
+
+
+def _exec_open_file(vim, args):
+    path = args.get("path", "")
+    vim.command("edit " + vim.eval("fnameescape('" + path.replace("'", "''") + "')"))
+    return f"Opened {path}"
+
+
+def _exec_save_buffer(vim, args):
+    buf = _resolve_buffer(vim, args.get("buffer"))
+    if buf is None:
+        return {"error": "Buffer not found"}
+    vim.command(f"buffer {buf.number}")
+    vim.command("write")
+    return f"Saved buffer {buf.number}: {buf.name}"
+
+
+def _exec_close_buffer(vim, args):
+    buf = _resolve_buffer(vim, args.get("buffer"))
+    if buf is None:
+        return {"error": "Buffer not found"}
+    force = args.get("force", False)
+    bang = "!" if force else ""
+    vim.command(f"bdelete{bang} {buf.number}")
+    return f"Closed buffer {buf.number}"
+
+
+def _exec_get_cursor(vim):
+    buf = vim.current.buffer
+    row, col = vim.current.window.cursor
+    return json.dumps({
+        "buffer": buf.number,
+        "name": buf.name or "[No Name]",
+        "line": row,
+        "column": col + 1,
+    })
+
+
+def _exec_set_cursor(vim, args):
+    line = args.get("line", 1)
+    col = args.get("column", 1)
+    vim.current.window.cursor = (line, col - 1)
+    return f"Cursor moved to line {line}, column {col}"
+
+
+def _exec_execute_command(vim, args):
+    allow = int(vim.eval("get(g:, 'mcp_server_allow_execute', 0)"))
+    if not allow:
+        return {"error": "execute_command is disabled. Set g:mcp_server_allow_execute = 1 to enable."}
+    cmd = args.get("command", "")
+    vim.command(cmd)
+    return f"Executed: {cmd}"
+
+
+def call_tool(name, arguments):
+    if name not in TOOL_DEFINITIONS:
+        return {"error": f"Unknown tool: {name}"}
+    request_id = str(uuid.uuid4())
+    result = mcp_vim_bridge.submit_request(request_id, name, arguments)
+    return result
