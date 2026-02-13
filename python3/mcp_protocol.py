@@ -6,6 +6,11 @@ PROTOCOL_VERSION = "2025-06-18"
 SERVER_INFO = {
     "name": "vim-mcp-server",
     "version": "0.1.0",
+    "description": (
+        "Provides tools for interacting with Vim buffers, cursor, and "
+        "visual selections. When no buffer is specified, the active "
+        "buffer is assumed."
+    ),
 }
 
 SERVER_CAPABILITIES = {
