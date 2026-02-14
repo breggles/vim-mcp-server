@@ -198,6 +198,129 @@ TOOL_DEFINITIONS = {
             "additionalProperties": False,
         },
     },
+    "get_quickfix_list": {
+        "description": "Get the current quickfix list entries.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+    },
+    "set_quickfix_list": {
+        "description": (
+            "Set the quickfix list. Replaces the current quickfix list with "
+            "the given entries. Each entry has a filename, line number, and "
+            "description text. Optionally opens the quickfix window."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "entries": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "filename": {
+                                "type": "string",
+                                "description": "File path.",
+                            },
+                            "line": {
+                                "type": "integer",
+                                "description": "Line number (1-based).",
+                            },
+                            "column": {
+                                "type": "integer",
+                                "description": "Column number (1-based).",
+                            },
+                            "text": {
+                                "type": "string",
+                                "description": "Description text for the entry.",
+                            },
+                            "type": {
+                                "type": "string",
+                                "description": "Single-letter type: E(rror), W(arning), I(nfo), N(ote), or H(int).",
+                            },
+                        },
+                        "required": ["filename", "line", "text"],
+                        "additionalProperties": False,
+                    },
+                    "description": "List of quickfix entries.",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Title for the quickfix list.",
+                },
+                "open": {
+                    "type": "boolean",
+                    "description": "Open the quickfix window after setting the list. Default false.",
+                },
+            },
+            "required": ["entries"],
+            "additionalProperties": False,
+        },
+    },
+    "get_location_list": {
+        "description": "Get the location list entries for the current window.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+    },
+    "set_location_list": {
+        "description": (
+            "Set the location list for the current window. Replaces the "
+            "current location list with the given entries. Each entry has a "
+            "filename, line number, and description text. Optionally opens "
+            "the location window."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "entries": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "filename": {
+                                "type": "string",
+                                "description": "File path.",
+                            },
+                            "line": {
+                                "type": "integer",
+                                "description": "Line number (1-based).",
+                            },
+                            "column": {
+                                "type": "integer",
+                                "description": "Column number (1-based).",
+                            },
+                            "text": {
+                                "type": "string",
+                                "description": "Description text for the entry.",
+                            },
+                            "type": {
+                                "type": "string",
+                                "description": "Single-letter type: E(rror), W(arning), I(nfo), N(ote), or H(int).",
+                            },
+                        },
+                        "required": ["filename", "line", "text"],
+                        "additionalProperties": False,
+                    },
+                    "description": "List of location list entries.",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Title for the location list.",
+                },
+                "open": {
+                    "type": "boolean",
+                    "description": "Open the location window after setting the list. Default false.",
+                },
+            },
+            "required": ["entries"],
+            "additionalProperties": False,
+        },
+    },
 }
 
 
@@ -238,6 +361,14 @@ def execute_on_main_thread(vim, func_name, args):
         return _exec_get_visual_selection(vim)
     if func_name == "execute_command":
         return _exec_execute_command(vim, args)
+    if func_name == "get_quickfix_list":
+        return _exec_get_quickfix_list(vim)
+    if func_name == "set_quickfix_list":
+        return _exec_set_quickfix_list(vim, args)
+    if func_name == "get_location_list":
+        return _exec_get_location_list(vim)
+    if func_name == "set_location_list":
+        return _exec_set_location_list(vim, args)
     return {"error": f"Unknown tool: {func_name}"}
 
 
@@ -399,6 +530,75 @@ def _exec_execute_command(vim, args):
     cmd = args.get("command", "")
     vim.command(cmd)
     return f"Executed: {cmd}"
+
+
+def _format_list_entries(vim, raw_entries):
+    entries = []
+    for e in raw_entries:
+        bufnr = int(e.get("bufnr", 0))
+        filename = e.get("filename", "")
+        if not filename and bufnr > 0:
+            filename = vim.eval(f"bufname({bufnr})")
+        entries.append({
+            "filename": filename,
+            "line": int(e.get("lnum", 0)),
+            "column": int(e.get("col", 0)),
+            "text": e.get("text", ""),
+            "type": e.get("type", ""),
+        })
+    return entries
+
+
+def _build_setqflist_items(entries):
+    items = []
+    for e in entries:
+        item = {
+            "filename": e["filename"],
+            "lnum": e["line"],
+            "text": e["text"],
+        }
+        if "column" in e:
+            item["col"] = e["column"]
+        if "type" in e:
+            item["type"] = e["type"]
+        items.append(item)
+    return items
+
+
+def _exec_get_quickfix_list(vim):
+    raw = vim.eval("getqflist()")
+    title = vim.eval("getqflist({'title': 1})").get("title", "")
+    return json.dumps({"title": title, "entries": _format_list_entries(vim, raw)})
+
+
+def _exec_set_quickfix_list(vim, args):
+    entries = args.get("entries", [])
+    title = args.get("title", "")
+    items = _build_setqflist_items(entries)
+    vim.eval(f"setqflist({json.dumps(items)}, 'r')")
+    if title:
+        vim.eval(f"setqflist([], 'a', {json.dumps({'title': title})})")
+    if args.get("open", False):
+        vim.command("copen")
+    return f"Set {len(entries)} quickfix entries"
+
+
+def _exec_get_location_list(vim):
+    raw = vim.eval("getloclist(0)")
+    title = vim.eval("getloclist(0, {'title': 1})").get("title", "")
+    return json.dumps({"title": title, "entries": _format_list_entries(vim, raw)})
+
+
+def _exec_set_location_list(vim, args):
+    entries = args.get("entries", [])
+    title = args.get("title", "")
+    items = _build_setqflist_items(entries)
+    vim.eval(f"setloclist(0, {json.dumps(items)}, 'r')")
+    if title:
+        vim.eval(f"setloclist(0, [], 'a', {json.dumps({'title': title})})")
+    if args.get("open", False):
+        vim.command("lopen")
+    return f"Set {len(entries)} location list entries"
 
 
 def call_tool(name, arguments):

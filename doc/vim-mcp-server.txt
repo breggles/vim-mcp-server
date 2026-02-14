@@ -126,6 +126,26 @@ execute_command                                 *mcp-tool-execute_command*
     Execute an arbitrary Vim Ex command.  Disabled by default; see
     |g:mcp_server_allow_execute|.
 
+get_quickfix_list                               *mcp-tool-get_quickfix_list*
+    Get the current quickfix list entries.  Returns each entry's
+    filename, line, column, text, and type.
+
+set_quickfix_list                               *mcp-tool-set_quickfix_list*
+    Set the quickfix list.  Replaces the current list with the given
+    entries.  Each entry requires a filename, line number, and text.
+    Optionally accepts a title and an open flag to show the quickfix
+    window.
+
+get_location_list                               *mcp-tool-get_location_list*
+    Get the location list entries for the current window.  Returns
+    each entry's filename, line, column, text, and type.
+
+set_location_list                               *mcp-tool-set_location_list*
+    Set the location list for the current window.  Replaces the
+    current list with the given entries.  Each entry requires a
+    filename, line number, and text.  Optionally accepts a title
+    and an open flag to show the location window.
+
 ==============================================================================
 6. Endpoint                                     *mcp-server-endpoint*
 
