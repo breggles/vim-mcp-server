@@ -95,9 +95,60 @@ The server exposes the following tools to MCP clients:
 | `set_cursor`           | Move cursor to a line and column                      |
 | `get_visual_selection` | Get the current or last visual selection               |
 | `execute_command`      | Run an arbitrary Ex command (opt-in, see above)       |
+| `get_quickfix_list`    | Get the current quickfix list entries                 |
+| `set_quickfix_list`    | Set the quickfix list                                 |
+| `get_location_list`    | Get the location list for the current window          |
+| `set_location_list`    | Set the location list for the current window          |
 
-When a tool accepts a buffer argument it can be a buffer number or a file
-path. When omitted, the current buffer is used.
+When a tool accepts a buffer argument it can be specified by number
+(`buffer_id`) or by file path (`buffer_path`). When both are omitted, the
+current buffer is used.
+
+## OpenCode Plan Mode
+
+By default, OpenCode's plan mode disables all MCP tools. To allow read-only
+vim tools in plan mode, add the following to your `opencode.jsonc`:
+
+```jsonc
+{
+  "agent": {
+    "plan": {
+      "tools": {
+        "vim_*": false,
+        "vim_list_buffers": true,
+        "vim_get_buffer": true,
+        "vim_get_cursor": true,
+        "vim_get_visual_selection": true,
+        "vim_open_file": true,
+        "vim_set_cursor": true,
+        "vim_get_quickfix_list": true,
+        "vim_set_quickfix_list": true,
+        "vim_get_location_list": true,
+        "vim_set_location_list": true
+      }
+    }
+  }
+}
+```
+
+This disables all `vim_*` tools first, then re-enables specific ones. Adjust
+the list to suit your workflow.
+
+## Development
+
+To work on the plugin without installing it, clone the repository and add it
+to Vim's runtime path:
+
+```vim
+set rtp+=~/path/to/vim-mcp-server
+```
+
+Add this to your `vimrc` or run it manually. Changes take effect the next time
+Vim is started. Generate the help tags with:
+
+```vim
+:helptags ~/path/to/vim-mcp-server/doc
+```
 
 ## License
 
