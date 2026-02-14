@@ -321,6 +321,18 @@ TOOL_DEFINITIONS = {
             "additionalProperties": False,
         },
     },
+    "get_messages": {
+        "description": (
+            "Get Vim's message history. Returns the messages that Vim has "
+            "displayed, including errors, warnings, and informational "
+            "messages. This is the output of the :messages command."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+    },
 }
 
 
@@ -369,6 +381,8 @@ def execute_on_main_thread(vim, func_name, args):
         return _exec_get_location_list(vim)
     if func_name == "set_location_list":
         return _exec_set_location_list(vim, args)
+    if func_name == "get_messages":
+        return _exec_get_messages(vim)
     return {"error": f"Unknown tool: {func_name}"}
 
 
@@ -599,6 +613,10 @@ def _exec_set_location_list(vim, args):
     if args.get("open", False):
         vim.command("lopen")
     return f"Set {len(entries)} location list entries"
+
+
+def _exec_get_messages(vim):
+    return vim.eval("execute('messages')")
 
 
 def call_tool(name, arguments):

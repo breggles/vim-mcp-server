@@ -146,6 +146,11 @@ set_location_list                               *mcp-tool-set_location_list*
     filename, line number, and text.  Optionally accepts a title
     and an open flag to show the location window.
 
+get_messages                                    *mcp-tool-get_messages*
+    Get Vim's message history.  Returns the messages that Vim has
+    displayed, including errors, warnings, and informational
+    messages.  This is the output of |:messages|.
+
 ==============================================================================
 6. Endpoint                                     *mcp-server-endpoint*
 

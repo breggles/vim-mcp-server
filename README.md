@@ -99,6 +99,7 @@ The server exposes the following tools to MCP clients:
 | `set_quickfix_list`    | Set the quickfix list                                 |
 | `get_location_list`    | Get the location list for the current window          |
 | `set_location_list`    | Set the location list for the current window          |
+| `get_messages`         | Get Vim's message history (`:messages` output)        |
 
 When a tool accepts a buffer argument it can be specified by number
 (`buffer_id`) or by file path (`buffer_path`). When both are omitted, the
@@ -124,7 +125,8 @@ vim tools in plan mode, add the following to your `opencode.jsonc`:
         "vim_get_quickfix_list": true,
         "vim_set_quickfix_list": true,
         "vim_get_location_list": true,
-        "vim_set_location_list": true
+        "vim_set_location_list": true,
+        "vim_get_messages": true
       }
     }
   }
