@@ -25,12 +25,13 @@ TOOL_DEFINITIONS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "buffer": {
-                    "type": ["integer", "string"],
-                    "description": (
-                        "Buffer number (integer) or file path (string). "
-                        "Use 0 or omit to read the current buffer."
-                    ),
+                "buffer_id": {
+                    "type": "integer",
+                    "description": "Buffer number. Omit to use the current buffer.",
+                },
+                "buffer_path": {
+                    "type": "string",
+                    "description": "File path of the buffer. Omit to use the current buffer.",
                 },
                 "start_line": {
                     "type": "integer",
@@ -53,9 +54,13 @@ TOOL_DEFINITIONS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "buffer": {
-                    "type": ["integer", "string"],
-                    "description": "Buffer number or file path. Use 0 or omit for the current buffer.",
+                "buffer_id": {
+                    "type": "integer",
+                    "description": "Buffer number. Omit to use the current buffer.",
+                },
+                "buffer_path": {
+                    "type": "string",
+                    "description": "File path of the buffer. Omit to use the current buffer.",
                 },
                 "action": {
                     "type": "string",
@@ -103,9 +108,13 @@ TOOL_DEFINITIONS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "buffer": {
-                    "type": ["integer", "string"],
-                    "description": "Buffer number or file path. Use 0 or omit for the current buffer.",
+                "buffer_id": {
+                    "type": "integer",
+                    "description": "Buffer number. Omit to use the current buffer.",
+                },
+                "buffer_path": {
+                    "type": "string",
+                    "description": "File path of the buffer. Omit to use the current buffer.",
                 },
             },
             "additionalProperties": False,
@@ -116,9 +125,13 @@ TOOL_DEFINITIONS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "buffer": {
-                    "type": ["integer", "string"],
-                    "description": "Buffer number or file path. Use 0 or omit for the current buffer.",
+                "buffer_id": {
+                    "type": "integer",
+                    "description": "Buffer number. Omit to use the current buffer.",
+                },
+                "buffer_path": {
+                    "type": "string",
+                    "description": "File path of the buffer. Omit to use the current buffer.",
                 },
                 "force": {
                     "type": "boolean",
@@ -188,18 +201,20 @@ TOOL_DEFINITIONS = {
 }
 
 
-def _resolve_buffer(vim, buf_arg):
-    if buf_arg is None or buf_arg == 0 or buf_arg == "":
-        return vim.current.buffer
-    if isinstance(buf_arg, int):
+def _resolve_buffer(vim, buffer_id=None, buffer_path=None):
+    if buffer_id is not None:
         try:
-            return vim.buffers[buf_arg]
+            return vim.buffers[buffer_id]
         except KeyError:
             return None
-    for b in vim.buffers:
-        if b.name == buf_arg or b.name.replace("\\", "/").endswith(buf_arg.replace("\\", "/")):
-            return b
-    return None
+    if buffer_path is not None:
+        for b in vim.buffers:
+            if b.name == buffer_path or b.name.replace("\\", "/").endswith(
+                buffer_path.replace("\\", "/")
+            ):
+                return b
+        return None
+    return vim.current.buffer
 
 
 def execute_on_main_thread(vim, func_name, args):
@@ -243,7 +258,7 @@ def _exec_list_buffers(vim):
 
 
 def _exec_get_buffer(vim, args):
-    buf = _resolve_buffer(vim, args.get("buffer"))
+    buf = _resolve_buffer(vim, args.get("buffer_id"), args.get("buffer_path"))
     if buf is None:
         return {"error": "Buffer not found"}
     start = args.get("start_line")
@@ -263,7 +278,7 @@ def _exec_get_buffer(vim, args):
 
 
 def _exec_edit_buffer(vim, args):
-    buf = _resolve_buffer(vim, args.get("buffer"))
+    buf = _resolve_buffer(vim, args.get("buffer_id"), args.get("buffer_path"))
     if buf is None:
         return {"error": "Buffer not found"}
     action = args.get("action")
@@ -297,16 +312,19 @@ def _exec_open_file(vim, args):
 
 
 def _exec_save_buffer(vim, args):
-    buf = _resolve_buffer(vim, args.get("buffer"))
+    buf = _resolve_buffer(vim, args.get("buffer_id"), args.get("buffer_path"))
     if buf is None:
         return {"error": "Buffer not found"}
+    prev = vim.current.buffer.number
     vim.command(f"buffer {buf.number}")
     vim.command("write")
+    if prev != buf.number:
+        vim.command(f"buffer {prev}")
     return f"Saved buffer {buf.number}: {buf.name}"
 
 
 def _exec_close_buffer(vim, args):
-    buf = _resolve_buffer(vim, args.get("buffer"))
+    buf = _resolve_buffer(vim, args.get("buffer_id"), args.get("buffer_path"))
     if buf is None:
         return {"error": "Buffer not found"}
     force = args.get("force", False)
