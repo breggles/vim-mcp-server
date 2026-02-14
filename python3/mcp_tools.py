@@ -210,7 +210,8 @@ TOOL_DEFINITIONS = {
         "description": (
             "Set the quickfix list. Replaces the current quickfix list with "
             "the given entries. Each entry has a filename, line number, and "
-            "description text. Optionally opens the quickfix window."
+            "description text. Optionally opens the quickfix window. "
+            "For a single location, prefer open_file and set_cursor instead."
         ),
         "inputSchema": {
             "type": "object",
@@ -272,7 +273,8 @@ TOOL_DEFINITIONS = {
             "Set the location list for the current window. Replaces the "
             "current location list with the given entries. Each entry has a "
             "filename, line number, and description text. Optionally opens "
-            "the location window."
+            "the location window. "
+            "For a single location, prefer open_file and set_cursor instead."
         ),
         "inputSchema": {
             "type": "object",

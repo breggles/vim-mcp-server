@@ -2,8 +2,8 @@
 
 An MCP (Model Context Protocol) server embedded in Vim. It exposes tools over
 HTTP that let MCP-compatible clients — such as AI coding agents — read and
-modify buffers, move the cursor, retrieve visual selections, and run Ex
-commands.
+modify buffers, move the cursor, retrieve visual selections, manage quickfix
+and location lists, read message history, and run Ex commands.
 
 ## Requirements
 

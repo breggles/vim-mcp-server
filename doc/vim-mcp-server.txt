@@ -15,7 +15,8 @@ CONTENTS                                        *mcp-server-contents*
 vim-mcp-server embeds a Model Context Protocol (MCP) server inside Vim.
 It exposes a set of tools over HTTP that allow MCP-compatible clients
 (such as AI coding agents) to read and modify Vim buffers, move the
-cursor, retrieve visual selections, and execute Ex commands.
+cursor, retrieve visual selections, manage quickfix and location lists,
+read message history, and execute Ex commands.
 
 The server runs on a background thread using Python 3 and listens on
 localhost.  All buffer operations are safely dispatched to Vim's main
