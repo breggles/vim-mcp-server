@@ -82,6 +82,7 @@ For example, for opencode add the server to your `opencode.jsonc`:
 | `g:mcp_server_port`            | `8765`  | Port the server listens on                     |
 | `g:mcp_server_autostart`       | `0`     | Start the server automatically on `VimEnter`   |
 | `g:mcp_server_allow_execute`   | `0`     | Enable the `execute_command` tool               |
+| `g:mcp_server_allow_save`     | `0`     | Enable the `save_buffer` tool                   |
 
 ## Tools
 
@@ -93,7 +94,7 @@ The server exposes the following tools to MCP clients:
 | `get_buffer`           | Read buffer contents (optionally a line range)        |
 | `edit_buffer`          | Replace, insert, or delete lines in a buffer          |
 | `open_file`            | Open a file via `:edit`                               |
-| `save_buffer`          | Save a buffer via `:write`                            |
+| `save_buffer`          | Save a buffer via `:write` (opt-in, see above)        |
 | `close_buffer`         | Close a buffer via `:bdelete`                         |
 | `get_cursor`           | Get current cursor position                           |
 | `set_cursor`           | Move cursor to a line and column                      |

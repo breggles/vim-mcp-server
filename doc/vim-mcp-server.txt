@@ -79,6 +79,15 @@ g:mcp_server_allow_execute
         let g:mcp_server_allow_execute = 1
 <
 
+                                                *g:mcp_server_allow_save*
+g:mcp_server_allow_save
+    When set to 1, the `save_buffer` tool is enabled, allowing
+    MCP clients to write buffers to disk.  This is disabled by
+    default for safety.  Default: 0.
+>
+        let g:mcp_server_allow_save = 1
+<
+
 ==============================================================================
 5. Tools                                        *mcp-server-tools*
 
@@ -106,7 +115,8 @@ open_file                                       *mcp-tool-open_file*
     switches to that buffer.
 
 save_buffer                                     *mcp-tool-save_buffer*
-    Save a buffer to disk using |:write|.
+    Save a buffer to disk using |:write|.  Disabled by default; see
+    |g:mcp_server_allow_save|.
 
 close_buffer                                    *mcp-tool-close_buffer*
     Close a buffer using |:bdelete|.  Supports a force option to

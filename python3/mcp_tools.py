@@ -90,7 +90,12 @@ TOOL_DEFINITIONS = {
         },
     },
     "open_file": {
-        "description": "Open a file in Vim using :edit. If the file is already open, switches to that buffer.",
+        "description": (
+            "Open a file in Vim using :edit. If the file is already open, "
+            "switches to that buffer. After opening, use set_cursor to move "
+            "to the line most relevant to the current task, so the user sees "
+            "it immediately."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -104,7 +109,10 @@ TOOL_DEFINITIONS = {
         },
     },
     "save_buffer": {
-        "description": "Save a buffer to disk using :write.",
+        "description": (
+            "Save a buffer to disk using :write. "
+            "Must be explicitly enabled via g:mcp_server_allow_save (disabled by default)."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -459,6 +467,9 @@ def _exec_open_file(vim, args):
 
 
 def _exec_save_buffer(vim, args):
+    allow = int(vim.eval("get(g:, 'mcp_server_allow_save', 0)"))
+    if not allow:
+        return {"error": "save_buffer is disabled. Set g:mcp_server_allow_save = 1 to enable."}
     buf = _resolve_buffer(vim, args.get("buffer_id"), args.get("buffer_path"))
     if buf is None:
         return {"error": "Buffer not found"}
