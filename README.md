@@ -36,32 +36,36 @@ git clone https://github.com/breggles/vim-mcp-server.git \
 
 ## Usage
 
-Start the server:
+### Start the server
+
+In Vim, run:
 
 ```vim
 :McpServerStart
 ```
 
-Start on a specific port:
+Auto-start the server on Vim launch by adding this to your `vimrc`:
 
 ```vim
-:McpServerStart 9000
+let g:mcp_server_autostart = 1
 ```
 
-Check status:
-
-```vim
-:McpServerStatus
-```
-
-Stop the server:
-
-```vim
-:McpServerStop
-```
+### MCP Client Configuration
 
 Point your MCP client at `http://127.0.0.1:8765/mcp` (or whichever port you
 chose).
+
+For example, for opencode add the server to your `opencode.jsonc`:
+
+```jsonc
+"mcp": {
+  "vim": {
+    "type": "remote",
+    "url": "http://localhost:8765/mcp",
+    "enabled": true
+  }
+}
+```
 
 ## Commands
 
@@ -146,7 +150,9 @@ set rtp+=~/path/to/vim-mcp-server
 ```
 
 Add this to your `vimrc` or run it manually. Changes take effect the next time
-Vim is started. Generate the help tags with:
+Vim is started.
+
+Generate the help tags with:
 
 ```vim
 :helptags ~/path/to/vim-mcp-server/doc
