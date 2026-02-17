@@ -94,7 +94,10 @@ TOOL_DEFINITIONS = {
             "Open a file in Vim using :edit. If the file is already open, "
             "switches to that buffer. After opening, use set_cursor to move "
             "to the line most relevant to the current task, so the user sees "
-            "it immediately."
+            "it immediately. "
+            "Only use this to show a single file. When presenting multiple "
+            "file locations to the user, use set_quickfix_list instead so "
+            "the user can navigate them with :cnext/:cprev."
         ),
         "inputSchema": {
             "type": "object",
@@ -219,6 +222,8 @@ TOOL_DEFINITIONS = {
             "Set the quickfix list. Replaces the current quickfix list with "
             "the given entries. Each entry has a filename, line number, and "
             "description text. Optionally opens the quickfix window. "
+            "Prefer this over multiple open_file calls when presenting two "
+            "or more file locations to the user. "
             "For a single location, prefer open_file and set_cursor instead."
         ),
         "inputSchema": {
@@ -282,6 +287,8 @@ TOOL_DEFINITIONS = {
             "current location list with the given entries. Each entry has a "
             "filename, line number, and description text. Optionally opens "
             "the location window. "
+            "Prefer this over multiple open_file calls when presenting two "
+            "or more file locations to the user. "
             "For a single location, prefer open_file and set_cursor instead."
         ),
         "inputSchema": {
