@@ -49,7 +49,8 @@ TOOL_DEFINITIONS = {
         "description": (
             "Modify lines in a buffer. Supports replacing a range of lines, "
             "inserting lines at a position, or deleting lines. Line numbers are "
-            "1-based and inclusive."
+            "1-based and inclusive. Must be explicitly enabled via "
+            "g:mcp_server_allow_edit (disabled by default)."
         ),
         "inputSchema": {
             "type": "object",
@@ -440,6 +441,9 @@ def _exec_get_buffer(vim, args):
 
 
 def _exec_edit_buffer(vim, args):
+    allow = int(vim.eval("get(g:, 'mcp_server_allow_edit', 0)"))
+    if not allow:
+        return {"error": "edit_buffer is disabled. Set g:mcp_server_allow_edit = 1 to enable."}
     buf = _resolve_buffer(vim, args.get("buffer_id"), args.get("buffer_path"))
     if buf is None:
         return {"error": "Buffer not found"}

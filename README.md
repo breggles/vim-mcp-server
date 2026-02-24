@@ -83,6 +83,7 @@ For example, for opencode add the server to your `opencode.jsonc`:
 | `g:mcp_server_autostart`       | `0`     | Start the server automatically on `VimEnter`   |
 | `g:mcp_server_allow_execute`   | `0`     | Enable the `execute_command` tool               |
 | `g:mcp_server_allow_save`     | `0`     | Enable the `save_buffer` tool                   |
+| `g:mcp_server_allow_edit`     | `0`     | Enable the `edit_buffer` tool                   |
 
 ## Tools
 

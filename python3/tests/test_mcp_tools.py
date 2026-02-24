@@ -92,6 +92,8 @@ def _make_vim(buffers, current_buf_number=None):
     vim.buffers.__iter__ = lambda self: iter(buffers)
     vim.buffers.__getitem__ = lambda self, key: buf_dict[key]
 
+    vim.eval = lambda expr: "1"
+
     return vim
 
 
@@ -339,6 +341,17 @@ class TestExecEditBuffer:
             "end_line": 1,
         })
         assert result == {"error": "Buffer not found"}
+
+    def test_disabled_by_default(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: "0"
+        result = mcp_tools._exec_edit_buffer(vim, {
+            "action": "replace",
+            "start_line": 1,
+            "end_line": 1,
+            "new_lines": ["xxx"],
+        })
+        assert result["error"].startswith("edit_buffer is disabled")
 
 
 class TestExecExecuteCommand:

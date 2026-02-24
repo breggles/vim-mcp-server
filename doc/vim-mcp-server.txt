@@ -88,6 +88,15 @@ g:mcp_server_allow_save
         let g:mcp_server_allow_save = 1
 <
 
+                                                *g:mcp_server_allow_edit*
+g:mcp_server_allow_edit
+    When set to 1, the `edit_buffer` tool is enabled, allowing
+    MCP clients to modify buffer contents.  This is disabled by
+    default for safety.  Default: 0.
+>
+        let g:mcp_server_allow_edit = 1
+<
+
 ==============================================================================
 5. Tools                                        *mcp-server-tools*
 
