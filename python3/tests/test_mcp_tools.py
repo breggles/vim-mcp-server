@@ -29,7 +29,7 @@ class TestToolDefinitions:
                 )
 
     def test_expected_tool_count(self):
-        assert len(mcp_tools.TOOL_DEFINITIONS) == 15
+        assert len(mcp_tools.TOOL_DEFINITIONS) == 16
 
 
 class TestBuildSetqflistItems:
@@ -367,3 +367,158 @@ class TestExecExecuteCommand:
         result = mcp_tools._exec_execute_command(vim, {"command": "%s/foo/bar/g"})
         assert "Executed" in result
         vim.command.assert_called_once_with("%s/foo/bar/g")
+
+
+class TestExecShowDiff:
+    def test_file_mode(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: expr.split("'")[1] if "fnameescape" in expr else "0"
+        result = mcp_tools._exec_show_diff(vim, {
+            "file_a": "/tmp/a.py",
+            "file_b": "/tmp/b.py",
+        })
+        assert "Showing diff" in result
+        assert "/tmp/a.py" in result
+        assert "/tmp/b.py" in result
+        commands = [c.args[0] for c in vim.command.call_args_list]
+        assert "tabnew" in commands
+        assert "diffthis" in commands
+        assert any("vert diffsplit" in c for c in commands)
+        assert commands.count("setlocal nomodifiable") == 2
+
+    def test_content_mode(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: expr.split("'")[1] if "fnameescape" in expr else "0"
+        buf_mock = MagicMock()
+        vim.current.buffer = buf_mock
+        result = mcp_tools._exec_show_diff(vim, {
+            "content_a": "line1\nline2",
+            "content_b": "line1\nline3",
+        })
+        assert "Showing diff" in result
+        commands = [c.args[0] for c in vim.command.call_args_list]
+        assert "tabnew" in commands
+        assert commands.count("diffthis") == 2
+        assert any("enew" in c for c in commands)
+        assert any("vnew" in c for c in commands)
+        assert commands.count("setlocal nomodifiable") == 2
+
+    def test_content_mode_custom_labels(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: expr.split("'")[1] if "fnameescape" in expr else "0"
+        buf_mock = MagicMock()
+        vim.current.buffer = buf_mock
+        result = mcp_tools._exec_show_diff(vim, {
+            "content_a": "old",
+            "content_b": "new",
+            "label_a": "before",
+            "label_b": "after",
+        })
+        assert "before" in result
+        assert "after" in result
+
+    def test_missing_both_pairs_returns_error(self):
+        vim = MagicMock()
+        result = mcp_tools._exec_show_diff(vim, {})
+        assert "error" in result
+
+    def test_partial_file_mode_returns_error(self):
+        vim = MagicMock()
+        result = mcp_tools._exec_show_diff(vim, {"file_a": "/tmp/a.py"})
+        assert "error" in result
+
+    def test_partial_content_mode_returns_error(self):
+        vim = MagicMock()
+        result = mcp_tools._exec_show_diff(vim, {"content_a": "hello"})
+        assert "error" in result
+
+    def test_dispatches_via_execute_on_main_thread(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: expr.split("'")[1] if "fnameescape" in expr else "0"
+        result = mcp_tools.execute_on_main_thread(vim, "show_diff", {
+            "file_a": "/tmp/a.py",
+            "file_b": "/tmp/b.py",
+        })
+        assert "Showing diff" in result
+
+
+class TestEnhanceDiffopt:
+    def test_adds_linematch_and_histogram_when_supported(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: {
+            "&diffopt": "internal,filler,closeoff",
+            "has('patch-9.1.1009')": "1",
+            "has('patch-8.1.0360')": "1",
+        }[expr]
+
+        mcp_tools._enhance_diffopt(vim)
+
+        commands = [c.args[0] for c in vim.command.call_args_list]
+        assert "set diffopt+=linematch:60" in commands
+        assert "set diffopt+=algorithm:histogram" in commands
+
+    def test_skips_linematch_when_vim_too_old(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: {
+            "&diffopt": "internal,filler,closeoff",
+            "has('patch-9.1.1009')": "0",
+            "has('patch-8.1.0360')": "1",
+        }[expr]
+
+        mcp_tools._enhance_diffopt(vim)
+
+        commands = [c.args[0] for c in vim.command.call_args_list]
+        assert not any("linematch" in c for c in commands)
+        assert "set diffopt+=algorithm:histogram" in commands
+
+    def test_skips_histogram_when_vim_too_old(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: {
+            "&diffopt": "internal,filler,closeoff",
+            "has('patch-9.1.1009')": "1",
+            "has('patch-8.1.0360')": "0",
+        }[expr]
+
+        mcp_tools._enhance_diffopt(vim)
+
+        commands = [c.args[0] for c in vim.command.call_args_list]
+        assert "set diffopt+=linematch:60" in commands
+        assert not any("histogram" in c for c in commands)
+
+    def test_skips_all_when_vim_too_old(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: {
+            "&diffopt": "internal,filler,closeoff",
+            "has('patch-9.1.1009')": "0",
+            "has('patch-8.1.0360')": "0",
+        }[expr]
+
+        mcp_tools._enhance_diffopt(vim)
+
+        vim.command.assert_not_called()
+
+    def test_skips_linematch_when_already_present(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: {
+            "&diffopt": "internal,filler,closeoff,linematch:80",
+            "has('patch-8.1.0360')": "1",
+        }[expr]
+
+        mcp_tools._enhance_diffopt(vim)
+
+        commands = [c.args[0] for c in vim.command.call_args_list]
+        assert not any("linematch" in c for c in commands)
+        assert "set diffopt+=algorithm:histogram" in commands
+
+    def test_skips_algorithm_when_already_present(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: {
+            "&diffopt": "internal,filler,closeoff,algorithm:patience",
+            "has('patch-9.1.1009')": "1",
+        }[expr]
+
+        mcp_tools._enhance_diffopt(vim)
+
+        commands = [c.args[0] for c in vim.command.call_args_list]
+        assert "set diffopt+=linematch:60" in commands
+        assert not any("histogram" in c for c in commands)

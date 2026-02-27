@@ -16,7 +16,7 @@ vim-mcp-server embeds a Model Context Protocol (MCP) server inside Vim.
 It exposes a set of tools over HTTP that allow MCP-compatible clients
 (such as AI coding agents) to read and modify Vim buffers, move the
 cursor, retrieve visual selections, manage quickfix and location lists,
-read message history, and execute Ex commands.
+open side-by-side diffs, read message history, and execute Ex commands.
 
 The server runs on a background thread using Python 3 and listens on
 localhost.  All buffer operations are safely dispatched to Vim's main
@@ -170,6 +170,30 @@ get_messages                                    *mcp-tool-get_messages*
     Get Vim's message history.  Returns the messages that Vim has
     displayed, including errors, warnings, and informational
     messages.  This is the output of |:messages|.
+
+show_diff                                       *mcp-tool-show_diff*
+    Open a side-by-side vertical diff view in a new tab page.
+    Supports two modes:
+
+    File mode: provide `file_a` and `file_b` to diff two files on
+    disk.
+
+    Content mode: provide `content_a` and `content_b` to diff
+    arbitrary text (e.g. from git revisions or GitHub pull
+    requests).  Optional `label_a` and `label_b` set the buffer
+    names shown in the diff.  Content-mode buffers are scratch
+    buffers that are wiped when closed.
+
+    Each call creates a new tab, so multiple diffs can be loaded
+    at once (e.g. when reviewing a PR).  Navigate between them
+    with |gt|, |gT|, |:tabnext|, or |:tabprev|.
+
+    On Vim 9.1.1009 or later the "linematch" |'diffopt'| value is
+    enabled automatically for better line alignment within diff
+    hunks.  On Vim 8.1.0360 or later the "algorithm:histogram"
+    value is enabled for higher-quality diffs.  Existing user
+    settings are preserved: neither value is added when it (or a
+    different algorithm) is already present in |'diffopt'|.
 
 ==============================================================================
 6. Endpoint                                     *mcp-server-endpoint*

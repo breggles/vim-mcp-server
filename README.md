@@ -3,7 +3,8 @@
 An MCP (Model Context Protocol) server embedded in Vim. It exposes tools over
 HTTP that let MCP-compatible clients — such as AI coding agents — read and
 modify buffers, move the cursor, retrieve visual selections, manage quickfix
-and location lists, read message history, and run Ex commands.
+and location lists, open side-by-side diffs, read message history, and run Ex
+commands.
 
 ## Requirements
 
@@ -106,6 +107,7 @@ The server exposes the following tools to MCP clients:
 | `get_location_list`    | Get the location list for the current window          |
 | `set_location_list`    | Set the location list for the current window          |
 | `get_messages`         | Get Vim's message history (`:messages` output)        |
+| `show_diff`            | Open a side-by-side diff view in a new tab (files or content) |
 
 When a tool accepts a buffer argument it can be specified by number
 (`buffer_id`) or by file path (`buffer_path`). When both are omitted, the
@@ -132,7 +134,8 @@ vim tools in plan mode, add the following to your `opencode.jsonc`:
         "vim_set_quickfix_list": true,
         "vim_get_location_list": true,
         "vim_set_location_list": true,
-        "vim_get_messages": true
+        "vim_get_messages": true,
+        "vim_show_diff": true
       }
     }
   }

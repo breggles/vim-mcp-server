@@ -351,6 +351,48 @@ TOOL_DEFINITIONS = {
             "additionalProperties": False,
         },
     },
+    "show_diff": {
+        "description": (
+            "Open a side-by-side diff view in Vim. Supports two modes: "
+            "content mode (provide content_a and content_b strings "
+            "to diff arbitrary text, e.g. from git or GitHub)"
+            "and file mode (provide file_a and file_b paths to diff files on disk)."
+            "Prefer content mode where possible."
+            "In content mode, optional label_a and label_b set the buffer "
+            "names. Always opens a vertical split in a new tab page. "
+            "Call multiple times to load several diffs."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "file_a": {
+                    "type": "string",
+                    "description": "Path to the first file (left side).",
+                },
+                "file_b": {
+                    "type": "string",
+                    "description": "Path to the second file (right side).",
+                },
+                "content_a": {
+                    "type": "string",
+                    "description": "Text content for the left side.",
+                },
+                "content_b": {
+                    "type": "string",
+                    "description": "Text content for the right side.",
+                },
+                "label_a": {
+                    "type": "string",
+                    "description": "Display name for the left buffer (content mode only). Defaults to 'a'.",
+                },
+                "label_b": {
+                    "type": "string",
+                    "description": "Display name for the right buffer (content mode only). Defaults to 'b'.",
+                },
+            },
+            "additionalProperties": False,
+        },
+    },
 }
 
 
@@ -401,6 +443,8 @@ def execute_on_main_thread(vim, func_name, args):
         return _exec_set_location_list(vim, args)
     if func_name == "get_messages":
         return _exec_get_messages(vim)
+    if func_name == "show_diff":
+        return _exec_show_diff(vim, args)
     return {"error": f"Unknown tool: {func_name}"}
 
 
@@ -641,6 +685,77 @@ def _exec_set_location_list(vim, args):
 
 def _exec_get_messages(vim):
     return vim.eval("execute('messages')")
+
+
+def _enhance_diffopt(vim):
+    current = vim.eval("&diffopt")
+
+    additions = []
+
+    if "linematch" not in current:
+        if vim.eval("has('patch-9.1.1009')") == "1":
+            additions.append("linematch:60")
+
+    if "algorithm:" not in current:
+        if vim.eval("has('patch-8.1.0360')") == "1":
+            additions.append("algorithm:histogram")
+
+    for item in additions:
+        vim.command("set diffopt+=" + item)
+
+
+def _setup_scratch_buffer(vim, content, label):
+    vim.command("enew")
+    vim.command("setlocal buftype=nofile bufhidden=wipe noswapfile")
+    escaped_label = vim.eval("fnameescape('" + label.replace("'", "''") + "')")
+    vim.command("file " + escaped_label)
+    lines = content.split("\n")
+    vim.current.buffer[:] = lines
+
+
+def _exec_show_diff(vim, args):
+    file_a = args.get("file_a")
+    file_b = args.get("file_b")
+    content_a = args.get("content_a")
+    content_b = args.get("content_b")
+
+    has_files = file_a is not None and file_b is not None
+    has_content = content_a is not None and content_b is not None
+
+    if not has_files and not has_content:
+        return {
+            "error": (
+                "Provide either file_a and file_b (file mode) "
+                "or content_a and content_b (content mode)."
+            )
+        }
+
+    vim.command("tabnew")
+    _enhance_diffopt(vim)
+
+    if has_files:
+        escaped_a = vim.eval("fnameescape('" + file_a.replace("'", "''") + "')")
+        escaped_b = vim.eval("fnameescape('" + file_b.replace("'", "''") + "')")
+        vim.command("edit " + escaped_a)
+        vim.command("setlocal nomodifiable")
+        vim.command("diffthis")
+        vim.command("vert diffsplit " + escaped_b)
+        vim.command("setlocal nomodifiable")
+        return f"Showing diff in new tab: {file_a} vs {file_b}"
+
+    label_a = args.get("label_a", "a")
+    label_b = args.get("label_b", "b")
+
+    _setup_scratch_buffer(vim, content_a, label_a)
+    vim.command("setlocal nomodifiable")
+    vim.command("diffthis")
+
+    vim.command("vnew")
+    _setup_scratch_buffer(vim, content_b, label_b)
+    vim.command("setlocal nomodifiable")
+    vim.command("diffthis")
+
+    return f"Showing diff in new tab: {label_a} vs {label_b}"
 
 
 def call_tool(name, arguments):
