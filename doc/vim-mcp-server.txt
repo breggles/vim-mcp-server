@@ -138,9 +138,10 @@ set_cursor                                      *mcp-tool-set_cursor*
     Move the cursor to a specific line and column.
 
 get_visual_selection                            *mcp-tool-get_visual_selection*
-    Get the current or last visual selection, including the selected
-    text, selection type (characterwise, linewise, or blockwise),
-    and start/end positions.
+    Get the current visual selection.  If Vim is in visual mode,
+    returns the selected text, selection type (characterwise,
+    linewise, or blockwise), and start/end positions.  If there is
+    no active selection, returns {"active": false}.
 
 execute_command                                 *mcp-tool-execute_command*
     Execute an arbitrary Vim Ex command.  Disabled by default; see

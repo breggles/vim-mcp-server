@@ -182,11 +182,11 @@ TOOL_DEFINITIONS = {
     },
     "get_visual_selection": {
         "description": (
-            "Get the current or last visual selection in Vim. Returns the "
-            "selected text, the selection type (v for characterwise, V for "
-            "linewise, ctrl-v for blockwise), and the start/end positions. "
-            "If Vim is currently in visual mode, returns the active selection. "
-            "Otherwise, returns the last visual selection."
+            "Get the current visual selection in Vim. If Vim is currently in "
+            "visual mode, returns the selected text, the selection type (v for "
+            "characterwise, V for linewise, ctrl-v for blockwise), and the "
+            "start/end positions. If there is no active visual selection, "
+            "returns {\"active\": false}."
         ),
         "inputSchema": {
             "type": "object",
@@ -599,16 +599,7 @@ def _exec_get_visual_selection(vim):
         lines = vim.eval(f"getregion(getpos('v'), getpos('.'), #{{ type: mode() }})")
         sel_type = mode.rstrip("s")
     else:
-        sel_type = vim.eval("visualmode()")
-        if not sel_type:
-            return json.dumps({"error": "No visual selection available"})
-        start = vim.eval("getpos(\"'<\")")
-        end = vim.eval("getpos(\"'>\")")
-        if start[1] == "0" and end[1] == "0":
-            return json.dumps({"error": "No visual selection marks set"})
-        lines = vim.eval(
-            "getregion(getpos(\"'<\"), getpos(\"'>\"), #{ type: visualmode() })"
-        )
+        return json.dumps({"active": False})
     start_line = int(start[1])
     start_col = int(start[2])
     end_line = int(end[1])

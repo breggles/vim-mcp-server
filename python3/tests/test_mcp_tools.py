@@ -257,6 +257,103 @@ class TestExecSetCursor:
         assert vim.current.window.cursor == (1, 0)
 
 
+class TestExecGetVisualSelection:
+    def _make_vim_in_visual(self, mode, start, end, lines):
+        vim = MagicMock()
+        eval_map = {
+            "mode()": mode,
+            "getpos('v')": start,
+            "getpos('.')": end,
+            f"getregion(getpos('v'), getpos('.'), #{{ type: mode() }})": lines,
+        }
+        vim.eval = lambda expr: eval_map[expr]
+        return vim
+
+    def test_characterwise_selection(self):
+        vim = self._make_vim_in_visual(
+            "v",
+            ["0", "1", "5", "0"],
+            ["0", "1", "10", "0"],
+            ["hello"],
+        )
+        result = json.loads(mcp_tools._exec_get_visual_selection(vim))
+        assert result["type"] == "characterwise"
+        assert result["text"] == "hello"
+        assert result["start"] == {"line": 1, "column": 5}
+        assert result["end"] == {"line": 1, "column": 10}
+
+    def test_linewise_selection(self):
+        vim = self._make_vim_in_visual(
+            "V",
+            ["0", "2", "1", "0"],
+            ["0", "4", "1", "0"],
+            ["line2", "line3", "line4"],
+        )
+        result = json.loads(mcp_tools._exec_get_visual_selection(vim))
+        assert result["type"] == "linewise"
+        assert result["text"] == "line2\nline3\nline4"
+        assert result["start"] == {"line": 2, "column": 1}
+        assert result["end"] == {"line": 4, "column": 1}
+
+    def test_blockwise_selection(self):
+        vim = self._make_vim_in_visual(
+            "\x16",
+            ["0", "1", "1", "0"],
+            ["0", "3", "5", "0"],
+            ["hello", "world", "block"],
+        )
+        result = json.loads(mcp_tools._exec_get_visual_selection(vim))
+        assert result["type"] == "blockwise"
+        assert result["text"] == "hello\nworld\nblock"
+        assert result["start"] == {"line": 1, "column": 1}
+        assert result["end"] == {"line": 3, "column": 5}
+
+    def test_select_mode_treated_as_visual(self):
+        vim = self._make_vim_in_visual(
+            "vs",
+            ["0", "1", "1", "0"],
+            ["0", "1", "5", "0"],
+            ["test"],
+        )
+        result = json.loads(mcp_tools._exec_get_visual_selection(vim))
+        assert result["type"] == "characterwise"
+        assert result["text"] == "test"
+
+    def test_positions_normalized_when_reversed(self):
+        vim = self._make_vim_in_visual(
+            "v",
+            ["0", "5", "10", "0"],
+            ["0", "2", "3", "0"],
+            ["selected"],
+        )
+        result = json.loads(mcp_tools._exec_get_visual_selection(vim))
+        assert result["start"] == {"line": 2, "column": 3}
+        assert result["end"] == {"line": 5, "column": 10}
+
+    def test_positions_normalized_same_line_reversed(self):
+        vim = self._make_vim_in_visual(
+            "v",
+            ["0", "3", "20", "0"],
+            ["0", "3", "5", "0"],
+            ["text"],
+        )
+        result = json.loads(mcp_tools._exec_get_visual_selection(vim))
+        assert result["start"] == {"line": 3, "column": 5}
+        assert result["end"] == {"line": 3, "column": 20}
+
+    def test_no_active_selection(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: "n"
+        result = json.loads(mcp_tools._exec_get_visual_selection(vim))
+        assert result == {"active": False}
+
+    def test_no_active_selection_in_insert_mode(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: "i"
+        result = json.loads(mcp_tools._exec_get_visual_selection(vim))
+        assert result == {"active": False}
+
+
 class TestExecEditBuffer:
     def test_replace(self):
         lines = ["aaa", "bbb", "ccc"]

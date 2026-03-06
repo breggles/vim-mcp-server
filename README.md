@@ -100,7 +100,7 @@ The server exposes the following tools to MCP clients:
 | `close_buffer`         | Close a buffer via `:bdelete`                         |
 | `get_cursor`           | Get current cursor position                           |
 | `set_cursor`           | Move cursor to a line and column                      |
-| `get_visual_selection` | Get the current or last visual selection               |
+| `get_visual_selection` | Get the current visual selection, if any               |
 | `execute_command`      | Run an arbitrary Ex command (opt-in, see above)       |
 | `get_quickfix_list`    | Get the current quickfix list entries                 |
 | `set_quickfix_list`    | Set the quickfix list                                 |
