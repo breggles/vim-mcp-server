@@ -522,3 +522,132 @@ class TestEnhanceDiffopt:
         commands = [c.args[0] for c in vim.command.call_args_list]
         assert "set diffopt+=linematch:60" in commands
         assert not any("histogram" in c for c in commands)
+
+
+class TestRequireAbsolutePath:
+    def test_absolute_unix_path_passes(self):
+        result = mcp_tools._require_absolute_path("/tmp/test.py", "path")
+        assert result is None
+
+    def test_absolute_windows_path_passes(self):
+        result = mcp_tools._require_absolute_path("C:\\Users\\test\\file.py", "path")
+        assert result is None
+
+    def test_relative_path_returns_error(self):
+        result = mcp_tools._require_absolute_path("src/main.py", "path")
+        assert result is not None
+        assert "error" in result
+        assert "absolute" in result["error"]
+        assert "src/main.py" in result["error"]
+
+    def test_bare_filename_returns_error(self):
+        result = mcp_tools._require_absolute_path("file.py", "path")
+        assert result is not None
+        assert "error" in result
+
+    def test_error_includes_param_name(self):
+        result = mcp_tools._require_absolute_path("relative.py", "file_a")
+        assert "file_a" in result["error"]
+
+
+class TestOpenFileRejectsRelativePath:
+    def test_relative_path_returns_error(self):
+        vim = MagicMock()
+        result = mcp_tools._exec_open_file(vim, {"path": "src/main.py"})
+        assert "error" in result
+        assert "absolute" in result["error"]
+        vim.command.assert_not_called()
+
+    def test_absolute_path_succeeds(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: expr.split("'")[1] if "fnameescape" in expr else "0"
+        result = mcp_tools._exec_open_file(vim, {"path": "/tmp/test.py"})
+        assert "Opened" in result
+
+
+class TestShowDiffRejectsRelativePath:
+    def test_relative_file_a_returns_error(self):
+        vim = MagicMock()
+        result = mcp_tools._exec_show_diff(vim, {
+            "file_a": "relative/a.py",
+            "file_b": "/tmp/b.py",
+        })
+        assert "error" in result
+        assert "file_a" in result["error"]
+        vim.command.assert_not_called()
+
+    def test_relative_file_b_returns_error(self):
+        vim = MagicMock()
+        result = mcp_tools._exec_show_diff(vim, {
+            "file_a": "/tmp/a.py",
+            "file_b": "relative/b.py",
+        })
+        assert "error" in result
+        assert "file_b" in result["error"]
+        vim.command.assert_not_called()
+
+    def test_content_mode_not_affected(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: expr.split("'")[1] if "fnameescape" in expr else "0"
+        buf_mock = MagicMock()
+        vim.current.buffer = buf_mock
+        result = mcp_tools._exec_show_diff(vim, {
+            "content_a": "line1",
+            "content_b": "line2",
+        })
+        assert "Showing diff" in result
+
+
+class TestSetQuickfixListRejectsRelativePath:
+    def test_relative_filename_returns_error(self):
+        vim = MagicMock()
+        result = mcp_tools._exec_set_quickfix_list(vim, {
+            "entries": [
+                {"filename": "src/foo.py", "line": 1, "text": "error"},
+            ],
+        })
+        assert "error" in result
+        assert "absolute" in result["error"]
+        vim.eval.assert_not_called()
+
+    def test_absolute_filenames_succeed(self):
+        vim = MagicMock()
+        result = mcp_tools._exec_set_quickfix_list(vim, {
+            "entries": [
+                {"filename": "/tmp/foo.py", "line": 1, "text": "error"},
+            ],
+        })
+        assert "Set 1 quickfix entries" in result
+
+    def test_mixed_paths_returns_error_on_first_relative(self):
+        vim = MagicMock()
+        result = mcp_tools._exec_set_quickfix_list(vim, {
+            "entries": [
+                {"filename": "/tmp/ok.py", "line": 1, "text": "fine"},
+                {"filename": "bad/path.py", "line": 2, "text": "problem"},
+            ],
+        })
+        assert "error" in result
+        assert "entries[1]" in result["error"]
+
+
+class TestSetLocationListRejectsRelativePath:
+    def test_relative_filename_returns_error(self):
+        vim = MagicMock()
+        result = mcp_tools._exec_set_location_list(vim, {
+            "entries": [
+                {"filename": "src/foo.py", "line": 1, "text": "error"},
+            ],
+        })
+        assert "error" in result
+        assert "absolute" in result["error"]
+        vim.eval.assert_not_called()
+
+    def test_absolute_filenames_succeed(self):
+        vim = MagicMock()
+        result = mcp_tools._exec_set_location_list(vim, {
+            "entries": [
+                {"filename": "/tmp/foo.py", "line": 1, "text": "error"},
+            ],
+        })
+        assert "Set 1 location list entries" in result

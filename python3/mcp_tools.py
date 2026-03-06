@@ -1,4 +1,5 @@
 import json
+import os
 import uuid
 
 import mcp_vim_bridge
@@ -105,7 +106,7 @@ TOOL_DEFINITIONS = {
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Absolute or relative file path to open.",
+                    "description": "Absolute file path to open.",
                 },
             },
             "required": ["path"],
@@ -237,7 +238,7 @@ TOOL_DEFINITIONS = {
                         "properties": {
                             "filename": {
                                 "type": "string",
-                                "description": "File path.",
+                                "description": "Absolute file path.",
                             },
                             "line": {
                                 "type": "integer",
@@ -302,7 +303,7 @@ TOOL_DEFINITIONS = {
                         "properties": {
                             "filename": {
                                 "type": "string",
-                                "description": "File path.",
+                                "description": "Absolute file path.",
                             },
                             "line": {
                                 "type": "integer",
@@ -388,17 +389,24 @@ TOOL_DEFINITIONS = {
                 },
                 "file_a": {
                     "type": "string",
-                    "description": "Path to the first file (left side). Only use when content is not already available.",
+                    "description": "Absolute path to the first file (left side). Only use when content is not already available.",
                 },
                 "file_b": {
                     "type": "string",
-                    "description": "Path to the second file (right side). Only use when content is not already available.",
+                    "description": "Absolute path to the second file (right side). Only use when content is not already available.",
                 },
             },
             "additionalProperties": False,
         },
     },
 }
+
+
+def _require_absolute_path(path, param_name):
+    if not os.path.isabs(path) and not path.startswith("/"):
+        return {"error": f"{param_name} must be an absolute path, got relative path: {path}"}
+
+    return None
 
 
 def _resolve_buffer(vim, buffer_id=None, buffer_path=None):
@@ -522,6 +530,11 @@ def _exec_edit_buffer(vim, args):
 
 def _exec_open_file(vim, args):
     path = args.get("path", "")
+
+    error = _require_absolute_path(path, "path")
+    if error:
+        return error
+
     vim.command("edit " + vim.eval("fnameescape('" + path.replace("'", "''") + "')"))
     return f"Opened {path}"
 
@@ -636,6 +649,15 @@ def _format_list_entries(vim, raw_entries):
     return entries
 
 
+def _validate_list_entries(entries):
+    for i, e in enumerate(entries):
+        error = _require_absolute_path(e["filename"], f"entries[{i}].filename")
+        if error:
+            return error
+
+    return None
+
+
 def _build_setqflist_items(entries):
     items = []
     for e in entries:
@@ -660,6 +682,11 @@ def _exec_get_quickfix_list(vim):
 
 def _exec_set_quickfix_list(vim, args):
     entries = args.get("entries", [])
+
+    error = _validate_list_entries(entries)
+    if error:
+        return error
+
     title = args.get("title", "")
     items = _build_setqflist_items(entries)
     vim.eval(f"setqflist({json.dumps(items)}, 'r')")
@@ -678,6 +705,11 @@ def _exec_get_location_list(vim):
 
 def _exec_set_location_list(vim, args):
     entries = args.get("entries", [])
+
+    error = _validate_list_entries(entries)
+    if error:
+        return error
+
     title = args.get("title", "")
     items = _build_setqflist_items(entries)
     vim.eval(f"setloclist(0, {json.dumps(items)}, 'r')")
@@ -734,6 +766,12 @@ def _exec_show_diff(vim, args):
                 "or content_a and content_b (content mode)."
             )
         }
+
+    if has_files:
+        for name, value in [("file_a", file_a), ("file_b", file_b)]:
+            error = _require_absolute_path(value, name)
+            if error:
+                return error
 
     vim.command("tabnew")
     _enhance_diffopt(vim)
