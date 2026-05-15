@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import uuid
 
 import mcp_vim_bridge
@@ -364,7 +365,9 @@ TOOL_DEFINITIONS = {
             "whose contents you have NOT already read. "
             "In content mode, use label_a and label_b to give the "
             "buffers meaningful names (e.g. the file paths or "
-            "descriptions like 'before'/'after'). "
+            "descriptions like 'before'/'after'), and filetype_a / "
+            "filetype_b to set the Vim filetype for syntax highlighting "
+            "(e.g. 'python', 'diff', 'markdown'). "
             "Always opens in a new tab. "
             "Call multiple times for multiple diffs."
         ),
@@ -386,6 +389,14 @@ TOOL_DEFINITIONS = {
                 "label_b": {
                     "type": "string",
                     "description": "Display name for the right buffer (content mode only). Defaults to 'b'.",
+                },
+                "filetype_a": {
+                    "type": "string",
+                    "description": "Vim filetype for the left buffer (content mode only). Used for syntax highlighting (e.g. 'python', 'diff'). If omitted, no filetype is set.",
+                },
+                "filetype_b": {
+                    "type": "string",
+                    "description": "Vim filetype for the right buffer (content mode only). Used for syntax highlighting (e.g. 'python', 'diff'). If omitted, no filetype is set.",
                 },
                 "file_a": {
                     "type": "string",
@@ -732,11 +743,20 @@ def _enhance_diffopt(vim):
         vim.command("set diffopt+=" + item)
 
 
-def _setup_scratch_buffer(vim, content, label):
+_FILETYPE_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def _is_valid_filetype(ft):
+    return isinstance(ft, str) and bool(_FILETYPE_PATTERN.match(ft))
+
+
+def _setup_scratch_buffer(vim, content, label, filetype=None):
     vim.command("enew")
     vim.command("setlocal buftype=nofile bufhidden=wipe noswapfile")
     escaped_label = vim.eval("fnameescape('" + label.replace("'", "''") + "')")
     vim.command("file " + escaped_label)
+    if filetype is not None and _is_valid_filetype(filetype):
+        vim.command("setlocal filetype=" + filetype)
     lines = content.split("\n")
     vim.current.buffer[:] = lines
 
@@ -779,13 +799,15 @@ def _exec_show_diff(vim, args):
 
     label_a = args.get("label_a", "a")
     label_b = args.get("label_b", "b")
+    filetype_a = args.get("filetype_a")
+    filetype_b = args.get("filetype_b")
 
-    _setup_scratch_buffer(vim, content_a, label_a)
+    _setup_scratch_buffer(vim, content_a, label_a, filetype_a)
     vim.command("setlocal nomodifiable")
     vim.command("diffthis")
 
     vim.command("vnew")
-    _setup_scratch_buffer(vim, content_b, label_b)
+    _setup_scratch_buffer(vim, content_b, label_b, filetype_b)
     vim.command("setlocal nomodifiable")
     vim.command("diffthis")
 

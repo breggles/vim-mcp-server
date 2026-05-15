@@ -514,6 +514,74 @@ class TestExecShowDiff:
         assert "before" in result
         assert "after" in result
 
+    def test_content_mode_with_filetypes(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: expr.split("'")[1] if "fnameescape" in expr else "0"
+        buf_mock = MagicMock()
+        vim.current.buffer = buf_mock
+        mcp_tools._exec_show_diff(vim, {
+            "content_a": "x",
+            "content_b": "y",
+            "filetype_a": "python",
+            "filetype_b": "python",
+        })
+        commands = [c.args[0] for c in vim.command.call_args_list]
+        assert commands.count("setlocal filetype=python") == 2
+
+    def test_content_mode_different_filetypes(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: expr.split("'")[1] if "fnameescape" in expr else "0"
+        buf_mock = MagicMock()
+        vim.current.buffer = buf_mock
+        mcp_tools._exec_show_diff(vim, {
+            "content_a": "x",
+            "content_b": "y",
+            "filetype_a": "diff",
+            "filetype_b": "markdown",
+        })
+        commands = [c.args[0] for c in vim.command.call_args_list]
+        assert "setlocal filetype=diff" in commands
+        assert "setlocal filetype=markdown" in commands
+
+    def test_content_mode_no_filetype_does_not_set(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: expr.split("'")[1] if "fnameescape" in expr else "0"
+        buf_mock = MagicMock()
+        vim.current.buffer = buf_mock
+        mcp_tools._exec_show_diff(vim, {
+            "content_a": "x",
+            "content_b": "y",
+        })
+        commands = [c.args[0] for c in vim.command.call_args_list]
+        assert not any(c.startswith("setlocal filetype=") for c in commands)
+
+    def test_content_mode_invalid_filetype_ignored(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: expr.split("'")[1] if "fnameescape" in expr else "0"
+        buf_mock = MagicMock()
+        vim.current.buffer = buf_mock
+        mcp_tools._exec_show_diff(vim, {
+            "content_a": "x",
+            "content_b": "y",
+            "filetype_a": "python; !ls",
+            "filetype_b": "valid_ft",
+        })
+        commands = [c.args[0] for c in vim.command.call_args_list]
+        assert not any("python; !ls" in c for c in commands)
+        assert "setlocal filetype=valid_ft" in commands
+
+    def test_file_mode_ignores_filetype(self):
+        vim = MagicMock()
+        vim.eval = lambda expr: expr.split("'")[1] if "fnameescape" in expr else "0"
+        mcp_tools._exec_show_diff(vim, {
+            "file_a": "/tmp/a.py",
+            "file_b": "/tmp/b.py",
+            "filetype_a": "python",
+            "filetype_b": "python",
+        })
+        commands = [c.args[0] for c in vim.command.call_args_list]
+        assert not any(c.startswith("setlocal filetype=") for c in commands)
+
     def test_missing_both_pairs_returns_error(self):
         vim = MagicMock()
         result = mcp_tools._exec_show_diff(vim, {})

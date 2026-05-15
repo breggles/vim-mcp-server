@@ -180,8 +180,11 @@ show_diff                                       *mcp-tool-show_diff*
     to diff arbitrary text (e.g. from git revisions, GitHub pull
     requests, or code already read into context).  Use `label_a`
     and `label_b` to give the buffers meaningful names (e.g. file
-    paths or descriptions like "before"/"after").  Content-mode
-    buffers are scratch buffers that are wiped when closed.
+    paths or descriptions like "before"/"after"), and `filetype_a`
+    and `filetype_b` to set the Vim |'filetype'| for syntax
+    highlighting (e.g. "python", "diff", "markdown"); when omitted,
+    no filetype is set.  Content-mode buffers are scratch buffers
+    that are wiped when closed.
 
     File mode: provide `file_a` and `file_b` to diff two files on
     disk.  Only use this when the file contents have not already
