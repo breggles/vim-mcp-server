@@ -3,8 +3,8 @@
 An MCP (Model Context Protocol) server embedded in Vim. It exposes tools over
 HTTP that let MCP-compatible clients — such as AI coding agents — read and
 modify buffers, move the cursor, retrieve visual selections, manage quickfix
-and location lists, open side-by-side diffs, read message history, and run Ex
-commands.
+and location lists, open side-by-side diffs (including git diffs computed
+inside Vim), read message history, and run Ex commands.
 
 ## Requirements
 
@@ -108,10 +108,45 @@ The server exposes the following tools to MCP clients:
 | `set_location_list`    | Set the location list for the current window          |
 | `get_messages`         | Get Vim's message history (`:messages` output)        |
 | `show_diff`            | Open a side-by-side diff view in a new tab (files or content) |
+| `show_git_diff`        | Open a side-by-side git diff in a new tab; git computes both sides inside Vim |
 
 When a tool accepts a buffer argument it can be specified by number
 (`buffer_id`) or by file path (`buffer_path`). When both are omitted, the
 current buffer is used.
+
+### `show_git_diff`
+
+Opens a side-by-side diff view in a new tab for a git-tracked file. The MCP
+client only sends the file path and (optionally) two refs; git fetches the
+contents of both sides inside Vim. Prefer this over `show_diff` whenever
+comparing git revisions, the index, or the working tree — it avoids the
+client having to pre-fetch and send the full file contents.
+
+Parameters:
+
+| Param    | Type    | Required | Default      | Notes                                                                                          |
+| -------- | ------- | -------- | ------------ | ---------------------------------------------------------------------------------------------- |
+| `path`   | string  | yes      | -            | Absolute path to the file. May refer to either the pre- or post-rename name.                  |
+| `ref_a`  | string  | no       | `"HEAD"`     | Left-side revision. Empty string means working tree on disk.                                   |
+| `ref_b`  | string  | no       | `""`         | Right-side revision. Empty string means working tree on disk.                                  |
+| `staged` | boolean | no       | `false`      | Convenience for `HEAD` vs index. Mutually exclusive with explicit `ref_a` / `ref_b`.           |
+
+Behaviour notes:
+
+- The repo root is auto-discovered from `path`; the file must live inside a
+  git repository.
+- Each buffer's filetype is detected by Vim's own `:filetype detect`, using
+  the file's name at the corresponding side, so a renamed file gets correct
+  highlighting on each side independently. Requires Vim's filetype plugins
+  to be enabled (`:filetype on`, which is the default).
+- Rename detection (`git diff -M`) is enabled, so a file renamed between the
+  two revisions is followed across sides.
+- If a side does not contain the file (e.g. an added or deleted file), that
+  buffer is shown empty and its label is marked `(missing)`.
+- Each call opens its own new tab. Call multiple times for multiple diffs.
+
+For non-git diffs (comparing arbitrary buffers, files, or generated content)
+use `show_diff` instead.
 
 ## OpenCode Plan Mode
 
@@ -135,7 +170,8 @@ vim tools in plan mode, add the following to your `opencode.jsonc`:
         "vim_get_location_list": true,
         "vim_set_location_list": true,
         "vim_get_messages": true,
-        "vim_show_diff": true
+        "vim_show_diff": true,
+        "vim_show_git_diff": true
       }
     }
   }

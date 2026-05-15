@@ -29,7 +29,7 @@ class TestToolDefinitions:
                 )
 
     def test_expected_tool_count(self):
-        assert len(mcp_tools.TOOL_DEFINITIONS) == 16
+        assert len(mcp_tools.TOOL_DEFINITIONS) == 17
 
 
 class TestBuildSetqflistItems:
@@ -816,3 +816,468 @@ class TestSetLocationListRejectsRelativePath:
             ],
         })
         assert "Set 1 location list entries" in result
+
+
+class _FakeCompletedProcess:
+    def __init__(self, returncode=0, stdout=b"", stderr=b""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def _make_vim_for_git_diff():
+    vim = MagicMock()
+    state = {"lazyredraw": "0"}
+
+    def eval_(expr):
+        if expr == "&lazyredraw":
+            return state["lazyredraw"]
+        if expr == "&diffopt":
+            return "internal,filler,closeoff,linematch:60,algorithm:histogram"
+        if expr.startswith("has('"):
+            return "1"
+        return "0"
+
+    def command(cmd):
+        if cmd == "set lazyredraw":
+            state["lazyredraw"] = "1"
+        elif cmd == "set nolazyredraw":
+            state["lazyredraw"] = "0"
+
+    vim.eval.side_effect = eval_
+    vim.command.side_effect = command
+    vim.current.buffer = MagicMock()
+    vim._state = state
+    return vim
+
+
+class TestExecShowGitDiff:
+    def _patch_git(self, monkeypatch, repo_root, run_git_side_effect, repo_root_lookup=None):
+        if repo_root_lookup is None:
+            monkeypatch.setattr(mcp_tools, "_git_repo_root", lambda path: repo_root)
+        else:
+            monkeypatch.setattr(mcp_tools, "_git_repo_root", repo_root_lookup)
+        monkeypatch.setattr(mcp_tools, "_run_git", run_git_side_effect)
+
+    def test_head_vs_working_tree(self, monkeypatch, tmp_path):
+        repo_root = str(tmp_path)
+        file_path = tmp_path / "foo.py"
+        file_path.write_text("worktree line\n", encoding="utf-8")
+
+        def fake_run(repo, args):
+            if args[:2] == ["cat-file", "-e"]:
+                return _FakeCompletedProcess(returncode=0)
+            if args[0] == "show":
+                return _FakeCompletedProcess(stdout=b"head line\n")
+            return _FakeCompletedProcess(returncode=1)
+
+        self._patch_git(monkeypatch, repo_root, fake_run)
+
+        vim = _make_vim_for_git_diff()
+        result = mcp_tools._exec_show_git_diff(vim, {"path": str(file_path)})
+
+        assert "Showing git diff in new tab" in result
+        assert "foo.py@HEAD" in result
+        assert "working tree" in result
+
+        commands = [c.args[0] for c in vim.command.call_args_list]
+        assert "tabnew" in commands
+        assert "vnew" in commands
+        assert sum(1 for c in commands if "diffthis" in c) == 2
+
+    def test_staged_uses_head_and_index(self, monkeypatch, tmp_path):
+        repo_root = str(tmp_path)
+        file_path = tmp_path / "foo.py"
+        file_path.write_text("x", encoding="utf-8")
+
+        calls = []
+
+        def fake_run(repo, args):
+            calls.append(list(args))
+            if args[:2] == ["cat-file", "-e"]:
+                return _FakeCompletedProcess(returncode=0)
+            if args[0] == "show":
+                return _FakeCompletedProcess(stdout=b"data\n")
+            return _FakeCompletedProcess(returncode=1)
+
+        self._patch_git(monkeypatch, repo_root, fake_run)
+
+        vim = _make_vim_for_git_diff()
+        result = mcp_tools._exec_show_git_diff(vim, {
+            "path": str(file_path),
+            "staged": True,
+        })
+
+        assert "HEAD" in result
+        assert "index" in result
+        show_args = [c for c in calls if c[0] == "show"]
+        assert any(arg[1] == "HEAD:foo.py" for arg in show_args)
+        assert any(arg[1] == ":foo.py" for arg in show_args)
+
+    def test_staged_with_explicit_refs_errors(self, monkeypatch, tmp_path):
+        file_path = tmp_path / "foo.py"
+        file_path.write_text("x", encoding="utf-8")
+        self._patch_git(monkeypatch, str(tmp_path), lambda repo, args: _FakeCompletedProcess())
+
+        vim = _make_vim_for_git_diff()
+        result = mcp_tools._exec_show_git_diff(vim, {
+            "path": str(file_path),
+            "staged": True,
+            "ref_a": "main",
+        })
+
+        assert "error" in result
+        assert "staged" in result["error"]
+
+    def test_explicit_refs(self, monkeypatch, tmp_path):
+        repo_root = str(tmp_path)
+        file_path = tmp_path / "foo.py"
+        file_path.write_text("x", encoding="utf-8")
+
+        seen = []
+
+        def fake_run(repo, args):
+            seen.append(list(args))
+            if args[:2] == ["cat-file", "-e"]:
+                return _FakeCompletedProcess(returncode=0)
+            if args[0] == "show":
+                return _FakeCompletedProcess(stdout=b"data\n")
+            return _FakeCompletedProcess(returncode=1)
+
+        self._patch_git(monkeypatch, repo_root, fake_run)
+
+        vim = _make_vim_for_git_diff()
+        result = mcp_tools._exec_show_git_diff(vim, {
+            "path": str(file_path),
+            "ref_a": "main",
+            "ref_b": "feature",
+        })
+
+        assert "main" in result
+        assert "feature" in result
+        show_args = [c for c in seen if c[0] == "show"]
+        assert any(arg[1] == "main:foo.py" for arg in show_args)
+        assert any(arg[1] == "feature:foo.py" for arg in show_args)
+
+    def test_missing_on_side_a(self, monkeypatch, tmp_path):
+        repo_root = str(tmp_path)
+        file_path = tmp_path / "added.py"
+        file_path.write_text("new content\n", encoding="utf-8")
+
+        def fake_run(repo, args):
+            if args[:2] == ["cat-file", "-e"]:
+                return _FakeCompletedProcess(returncode=1, stderr=b"")
+            if args[0] == "diff":
+                return _FakeCompletedProcess(returncode=0, stdout=b"")
+            if args[0] == "show":
+                return _FakeCompletedProcess(returncode=128, stderr=b"fatal: Path 'added.py' does not exist in 'HEAD'\n")
+            return _FakeCompletedProcess(returncode=1)
+
+        self._patch_git(monkeypatch, repo_root, fake_run)
+
+        vim = _make_vim_for_git_diff()
+        result = mcp_tools._exec_show_git_diff(vim, {"path": str(file_path)})
+
+        assert "(missing)" in result
+        assert "added.py@HEAD" in result
+
+    def test_missing_on_side_b(self, monkeypatch, tmp_path):
+        repo_root = str(tmp_path)
+        file_path = tmp_path / "deleted.py"
+
+        def fake_run(repo, args):
+            if args[:2] == ["cat-file", "-e"]:
+                return _FakeCompletedProcess(returncode=0)
+            if args[0] == "show":
+                return _FakeCompletedProcess(stdout=b"old content\n")
+            return _FakeCompletedProcess(returncode=1)
+
+        self._patch_git(monkeypatch, repo_root, fake_run)
+
+        vim = _make_vim_for_git_diff()
+        result = mcp_tools._exec_show_git_diff(vim, {"path": str(file_path)})
+
+        assert "(missing)" in result
+        assert "working tree" in result
+
+    def test_rename_detection(self, monkeypatch, tmp_path):
+        repo_root = str(tmp_path)
+        file_path = tmp_path / "new_name.py"
+        file_path.write_text("renamed\n", encoding="utf-8")
+
+        def fake_run(repo, args):
+            if args[:2] == ["cat-file", "-e"]:
+                return _FakeCompletedProcess(returncode=1)
+            if args[0] == "diff":
+                return _FakeCompletedProcess(stdout=b"R100\told_name.py\tnew_name.py\n")
+            if args[0] == "show" and args[1] == "HEAD:old_name.py":
+                return _FakeCompletedProcess(stdout=b"original\n")
+            if args[0] == "show":
+                return _FakeCompletedProcess(returncode=128, stderr=b"does not exist\n")
+            return _FakeCompletedProcess(returncode=1)
+
+        self._patch_git(monkeypatch, repo_root, fake_run)
+
+        vim = _make_vim_for_git_diff()
+        result = mcp_tools._exec_show_git_diff(vim, {"path": str(file_path)})
+
+        assert "old_name.py@HEAD" in result
+        assert "new_name.py" in result
+        assert "working tree" in result
+
+    def test_path_not_in_repo(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(mcp_tools, "_git_repo_root", lambda path: None)
+        file_path = tmp_path / "x.py"
+        file_path.write_text("x", encoding="utf-8")
+
+        vim = _make_vim_for_git_diff()
+        result = mcp_tools._exec_show_git_diff(vim, {"path": str(file_path)})
+
+        assert "error" in result
+        assert "not inside a git repository" in result["error"]
+
+    def test_path_must_be_absolute(self):
+        vim = _make_vim_for_git_diff()
+        result = mcp_tools._exec_show_git_diff(vim, {"path": "relative/foo.py"})
+        assert "error" in result
+        assert "absolute" in result["error"]
+
+    def test_path_required(self):
+        vim = _make_vim_for_git_diff()
+        result = mcp_tools._exec_show_git_diff(vim, {})
+        assert "error" in result
+
+    def test_ref_a_with_leading_dash_rejected(self, monkeypatch, tmp_path):
+        file_path = tmp_path / "foo.py"
+        file_path.write_text("x", encoding="utf-8")
+        self._patch_git(monkeypatch, str(tmp_path), lambda repo, args: _FakeCompletedProcess())
+
+        vim = _make_vim_for_git_diff()
+        result = mcp_tools._exec_show_git_diff(vim, {
+            "path": str(file_path),
+            "ref_a": "--evil",
+        })
+        assert "error" in result
+
+    def test_ref_b_with_leading_dash_rejected(self, monkeypatch, tmp_path):
+        file_path = tmp_path / "foo.py"
+        file_path.write_text("x", encoding="utf-8")
+        self._patch_git(monkeypatch, str(tmp_path), lambda repo, args: _FakeCompletedProcess())
+
+        vim = _make_vim_for_git_diff()
+        result = mcp_tools._exec_show_git_diff(vim, {
+            "path": str(file_path),
+            "ref_b": "--evil",
+        })
+        assert "error" in result
+
+    def test_filetype_detect_uses_bare_basename(self, monkeypatch, tmp_path):
+        repo_root = str(tmp_path)
+        file_path = tmp_path / "foo.py"
+        file_path.write_text("x\n", encoding="utf-8")
+
+        def fake_run(repo, args):
+            if args[:2] == ["cat-file", "-e"]:
+                return _FakeCompletedProcess(returncode=0)
+            if args[0] == "show":
+                return _FakeCompletedProcess(stdout=b"x\n")
+            return _FakeCompletedProcess(returncode=1)
+
+        self._patch_git(monkeypatch, repo_root, fake_run)
+
+        vim = _make_vim_for_git_diff()
+        mcp_tools._exec_show_git_diff(vim, {"path": str(file_path)})
+
+        commands = [c.args[0] for c in vim.command.call_args_list]
+        buffer_setup_cmds = [c for c in commands if c.startswith("enew | ")]
+        assert len(buffer_setup_cmds) == 2
+        for cmd in buffer_setup_cmds:
+            assert "file foo.py |" in cmd
+            assert "filetype detect" in cmd
+
+    def test_filetype_detect_always_issued_regardless_of_extension(
+        self, monkeypatch, tmp_path
+    ):
+        repo_root = str(tmp_path)
+        file_path = tmp_path / "foo.xyz"
+        file_path.write_text("x\n", encoding="utf-8")
+
+        def fake_run(repo, args):
+            if args[:2] == ["cat-file", "-e"]:
+                return _FakeCompletedProcess(returncode=0)
+            if args[0] == "show":
+                return _FakeCompletedProcess(stdout=b"x\n")
+            return _FakeCompletedProcess(returncode=1)
+
+        self._patch_git(monkeypatch, repo_root, fake_run)
+
+        vim = _make_vim_for_git_diff()
+        mcp_tools._exec_show_git_diff(vim, {"path": str(file_path)})
+
+        commands = [c.args[0] for c in vim.command.call_args_list]
+        buffer_setup_cmds = [c for c in commands if c.startswith("enew | ")]
+        assert len(buffer_setup_cmds) == 2
+        for cmd in buffer_setup_cmds:
+            assert "filetype detect" in cmd
+        assert not any("setlocal filetype=" in c for c in commands)
+
+    def test_filetype_detect_uses_per_side_basename_on_rename(
+        self, monkeypatch, tmp_path
+    ):
+        repo_root = str(tmp_path)
+        file_path = tmp_path / "new_name.rs"
+        file_path.write_text("renamed\n", encoding="utf-8")
+
+        def fake_run(repo, args):
+            if args[:2] == ["cat-file", "-e"]:
+                return _FakeCompletedProcess(returncode=1)
+            if args[0] == "diff":
+                return _FakeCompletedProcess(
+                    stdout=b"R100\told_name.py\tnew_name.rs\n"
+                )
+            if args[0] == "show" and args[1] == "HEAD:old_name.py":
+                return _FakeCompletedProcess(stdout=b"original\n")
+            if args[0] == "show":
+                return _FakeCompletedProcess(
+                    returncode=128, stderr=b"does not exist\n"
+                )
+            return _FakeCompletedProcess(returncode=1)
+
+        self._patch_git(monkeypatch, repo_root, fake_run)
+
+        vim = _make_vim_for_git_diff()
+        mcp_tools._exec_show_git_diff(vim, {"path": str(file_path)})
+
+        commands = [c.args[0] for c in vim.command.call_args_list]
+        buffer_setup_cmds = [c for c in commands if c.startswith("enew | ")]
+        assert len(buffer_setup_cmds) == 2
+        assert "file old_name.py |" in buffer_setup_cmds[0]
+        assert "file new_name.rs |" in buffer_setup_cmds[1]
+
+    def test_large_output_returns_error(self, monkeypatch, tmp_path):
+        repo_root = str(tmp_path)
+        file_path = tmp_path / "huge.py"
+        file_path.write_text("x", encoding="utf-8")
+
+        big = b"x" * (mcp_tools._MAX_GIT_OUTPUT_BYTES + 1)
+
+        def fake_run(repo, args):
+            if args[:2] == ["cat-file", "-e"]:
+                return _FakeCompletedProcess(returncode=0)
+            if args[0] == "show":
+                return _FakeCompletedProcess(stdout=big)
+            return _FakeCompletedProcess(returncode=1)
+
+        self._patch_git(monkeypatch, repo_root, fake_run)
+
+        vim = _make_vim_for_git_diff()
+        result = mcp_tools._exec_show_git_diff(vim, {"path": str(file_path)})
+        assert "error" in result
+
+    def test_lazyredraw_restored(self, monkeypatch, tmp_path):
+        repo_root = str(tmp_path)
+        file_path = tmp_path / "foo.py"
+        file_path.write_text("x\n", encoding="utf-8")
+
+        def fake_run(repo, args):
+            if args[:2] == ["cat-file", "-e"]:
+                return _FakeCompletedProcess(returncode=0)
+            if args[0] == "show":
+                return _FakeCompletedProcess(stdout=b"x\n")
+            return _FakeCompletedProcess(returncode=1)
+
+        self._patch_git(monkeypatch, repo_root, fake_run)
+
+        vim = _make_vim_for_git_diff()
+        vim._state["lazyredraw"] = "0"
+        mcp_tools._exec_show_git_diff(vim, {"path": str(file_path)})
+        assert vim._state["lazyredraw"] == "0"
+
+        vim2 = _make_vim_for_git_diff()
+        vim2._state["lazyredraw"] = "1"
+        mcp_tools._exec_show_git_diff(vim2, {"path": str(file_path)})
+        assert vim2._state["lazyredraw"] == "1"
+
+    def test_label_escaping_spaces_and_specials(self, monkeypatch, tmp_path):
+        repo_root = str(tmp_path)
+        sub = tmp_path / "a b"
+        sub.mkdir()
+        file_path = sub / "c#d.py"
+        file_path.write_text("x\n", encoding="utf-8")
+
+        def fake_run(repo, args):
+            if args[:2] == ["cat-file", "-e"]:
+                return _FakeCompletedProcess(returncode=0)
+            if args[0] == "show":
+                return _FakeCompletedProcess(stdout=b"x\n")
+            return _FakeCompletedProcess(returncode=1)
+
+        self._patch_git(monkeypatch, repo_root, fake_run)
+
+        vim = _make_vim_for_git_diff()
+        mcp_tools._exec_show_git_diff(vim, {"path": str(file_path)})
+
+        commands = [c.args[0] for c in vim.command.call_args_list]
+        file_cmds = [c for c in commands if c.startswith("enew | ")]
+        assert len(file_cmds) == 2
+        for cmd in file_cmds:
+            assert "\\ " in cmd
+            assert "\\#" in cmd
+
+    def test_enhance_diffopt_cache_avoids_repeated_has(self, monkeypatch, tmp_path):
+        repo_root = str(tmp_path)
+        file_path = tmp_path / "foo.py"
+        file_path.write_text("x\n", encoding="utf-8")
+
+        def fake_run(repo, args):
+            if args[:2] == ["cat-file", "-e"]:
+                return _FakeCompletedProcess(returncode=0)
+            if args[0] == "show":
+                return _FakeCompletedProcess(stdout=b"x\n")
+            return _FakeCompletedProcess(returncode=1)
+
+        self._patch_git(monkeypatch, repo_root, fake_run)
+
+        has_calls = []
+
+        def eval_(expr):
+            if expr.startswith("has('"):
+                has_calls.append(expr)
+                return "1"
+            if expr == "&lazyredraw":
+                return "0"
+            if expr == "&diffopt":
+                return "internal,filler,closeoff"
+            return "0"
+
+        vim = MagicMock()
+        vim.eval.side_effect = eval_
+        vim.current.buffer = MagicMock()
+
+        mcp_tools._exec_show_git_diff(vim, {"path": str(file_path)})
+        first_count = len(has_calls)
+
+        mcp_tools._exec_show_git_diff(vim, {"path": str(file_path)})
+        second_count = len(has_calls)
+
+        assert second_count == first_count
+
+    def test_dispatch_via_execute_on_main_thread(self, monkeypatch, tmp_path):
+        repo_root = str(tmp_path)
+        file_path = tmp_path / "foo.py"
+        file_path.write_text("x\n", encoding="utf-8")
+
+        def fake_run(repo, args):
+            if args[:2] == ["cat-file", "-e"]:
+                return _FakeCompletedProcess(returncode=0)
+            if args[0] == "show":
+                return _FakeCompletedProcess(stdout=b"x\n")
+            return _FakeCompletedProcess(returncode=1)
+
+        self._patch_git(monkeypatch, repo_root, fake_run)
+
+        vim = _make_vim_for_git_diff()
+        result = mcp_tools.execute_on_main_thread(vim, "show_git_diff", {
+            "path": str(file_path),
+        })
+        assert "Showing git diff" in result
