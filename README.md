@@ -114,40 +114,6 @@ When a tool accepts a buffer argument it can be specified by number
 (`buffer_id`) or by file path (`buffer_path`). When both are omitted, the
 current buffer is used.
 
-### `show_git_diff`
-
-Opens a side-by-side diff view in a new tab for a git-tracked file. The MCP
-client only sends the file path and (optionally) two refs; git fetches the
-contents of both sides inside Vim. Prefer this over `show_diff` whenever
-comparing git revisions, the index, or the working tree — it avoids the
-client having to pre-fetch and send the full file contents.
-
-Parameters:
-
-| Param    | Type    | Required | Default      | Notes                                                                                          |
-| -------- | ------- | -------- | ------------ | ---------------------------------------------------------------------------------------------- |
-| `path`   | string  | yes      | -            | Absolute path to the file. May refer to either the pre- or post-rename name.                  |
-| `ref_a`  | string  | no       | `"HEAD"`     | Left-side revision. Empty string means working tree on disk.                                   |
-| `ref_b`  | string  | no       | `""`         | Right-side revision. Empty string means working tree on disk.                                  |
-| `staged` | boolean | no       | `false`      | Convenience for `HEAD` vs index. Mutually exclusive with explicit `ref_a` / `ref_b`.           |
-
-Behaviour notes:
-
-- The repo root is auto-discovered from `path`; the file must live inside a
-  git repository.
-- Each buffer's filetype is detected by Vim's own `:filetype detect`, using
-  the file's name at the corresponding side, so a renamed file gets correct
-  highlighting on each side independently. Requires Vim's filetype plugins
-  to be enabled (`:filetype on`, which is the default).
-- Rename detection (`git diff -M`) is enabled, so a file renamed between the
-  two revisions is followed across sides.
-- If a side does not contain the file (e.g. an added or deleted file), that
-  buffer is shown empty and its label is marked `(missing)`.
-- Each call opens its own new tab. Call multiple times for multiple diffs.
-
-For non-git diffs (comparing arbitrary buffers, files, or generated content)
-use `show_diff` instead.
-
 ## OpenCode Plan Mode
 
 By default, OpenCode's plan mode disables all MCP tools. To allow read-only
