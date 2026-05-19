@@ -6,6 +6,9 @@ modify buffers, move the cursor, retrieve visual selections, manage quickfix
 and location lists, open side-by-side diffs (including git diffs computed
 inside Vim), read message history, and run Ex commands.
 
+Atm, I mainly use this for getting the agent to show me files/lines in Vim. 
+Sometimes, I use it for showing selected regions to the agent.
+
 ## Requirements
 
 - Vim compiled with `+python3`
