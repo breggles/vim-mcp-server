@@ -71,3 +71,38 @@ class TestKeepAlive:
         assert second.status == 200
 
         assert reused
+
+
+class TestStop:
+    def setup_method(self):
+        mcp_server.start(0)
+
+        self.port = mcp_server._server.server_address[1]
+
+    def teardown_method(self):
+        mcp_server.stop()
+
+    def test_refuses_request_on_open_connection_after_stop(self):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=2)
+
+        body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "ping"})
+
+        conn.request("POST", "/mcp", body, {"Content-Type": "application/json"})
+
+        first = conn.getresponse()
+
+        first.read()
+
+        mcp_server.stop()
+
+        conn.request("POST", "/mcp", body, {"Content-Type": "application/json"})
+
+        second = conn.getresponse()
+
+        second.read()
+
+        conn.close()
+
+        assert first.status == 200
+
+        assert second.status == 503

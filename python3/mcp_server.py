@@ -15,6 +15,17 @@ class McpRequestHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     timeout = 120
 
+    def parse_request(self):
+        if not super().parse_request():
+            return False
+
+        if self.server is not _server:
+            self.send_error(503)
+
+            return False
+
+        return True
+
     def do_POST(self):
         if self.path != "/mcp":
             self.send_error(404)
