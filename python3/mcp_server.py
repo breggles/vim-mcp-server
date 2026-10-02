@@ -15,6 +15,12 @@ class McpRequestHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     timeout = 120
 
+    def handle(self):
+        try:
+            super().handle()
+        except ConnectionError:
+            pass
+
     def parse_request(self):
         if not super().parse_request():
             return False

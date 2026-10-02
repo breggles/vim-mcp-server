@@ -1,6 +1,7 @@
 import http.client
 import json
 import socket
+import struct
 import time
 
 import pytest
@@ -76,6 +77,33 @@ class TestKeepAlive:
         assert second.status == 200
 
         assert reused
+
+
+class TestClientReset:
+    def setup_method(self):
+        mcp_server.start(0)
+
+        self.port = mcp_server._server.server_address[1]
+
+    def teardown_method(self):
+        mcp_server.stop()
+
+    def test_writes_nothing_to_stderr_when_client_resets_idle_connection(self, capsys):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=2)
+
+        body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "ping"})
+
+        conn.request("POST", "/mcp", body, {"Content-Type": "application/json"})
+
+        conn.getresponse().read()
+
+        conn.sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+
+        conn.close()
+
+        time.sleep(0.2)
+
+        assert capsys.readouterr().err == ""
 
 
 class TestNotFound:
