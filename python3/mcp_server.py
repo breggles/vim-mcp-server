@@ -1,6 +1,6 @@
 import json
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 import mcp_protocol
 import mcp_tools
@@ -83,7 +83,7 @@ def start(port=8765):
     global _server, _server_thread
     if _server is not None:
         return f"MCP server already running on port {port}"
-    _server = HTTPServer(("127.0.0.1", port), McpRequestHandler)
+    _server = ThreadingHTTPServer(("127.0.0.1", port), McpRequestHandler)
     _server_thread = threading.Thread(target=_server.serve_forever, daemon=True)
     _server_thread.start()
     return f"MCP server started on http://127.0.0.1:{port}/mcp"
