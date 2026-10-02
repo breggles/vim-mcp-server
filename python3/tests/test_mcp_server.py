@@ -30,3 +30,26 @@ class TestConcurrentConnections:
         conn.close()
 
         assert response.status == 200
+
+
+class TestConnectionHeader:
+    def setup_method(self):
+        mcp_server.start(0)
+
+        self.port = mcp_server._server.server_address[1]
+
+    def teardown_method(self):
+        mcp_server.stop()
+
+    def test_response_tells_client_to_close_connection(self):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=2)
+
+        body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "ping"})
+
+        conn.request("POST", "/mcp", body, {"Content-Type": "application/json"})
+
+        response = conn.getresponse()
+
+        conn.close()
+
+        assert response.getheader("Connection") == "close"

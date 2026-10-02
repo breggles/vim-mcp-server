@@ -75,6 +75,11 @@ class McpRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def send_response(self, code, message=None):
+        super().send_response(code, message)
+
+        self.send_header("Connection", "close")
+
     def log_message(self, format, *args):
         pass
 
