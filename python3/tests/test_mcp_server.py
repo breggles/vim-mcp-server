@@ -32,7 +32,7 @@ class TestConcurrentConnections:
         assert response.status == 200
 
 
-class TestConnectionHeader:
+class TestKeepAlive:
     def setup_method(self):
         mcp_server.start(0)
 
@@ -41,15 +41,33 @@ class TestConnectionHeader:
     def teardown_method(self):
         mcp_server.stop()
 
-    def test_response_tells_client_to_close_connection(self):
+    def test_reuses_connection_for_second_request(self):
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=2)
+
+        conn.connect()
+
+        sock = conn.sock
 
         body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "ping"})
 
         conn.request("POST", "/mcp", body, {"Content-Type": "application/json"})
 
-        response = conn.getresponse()
+        first = conn.getresponse()
+
+        first.read()
+
+        conn.request("POST", "/mcp", body, {"Content-Type": "application/json"})
+
+        second = conn.getresponse()
+
+        second.read()
+
+        reused = conn.sock is sock
 
         conn.close()
 
-        assert response.getheader("Connection") == "close"
+        assert first.status == 200
+
+        assert second.status == 200
+
+        assert reused

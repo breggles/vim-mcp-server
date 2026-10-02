@@ -12,6 +12,8 @@ _session_id = None
 
 
 class McpRequestHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
     def do_POST(self):
         if self.path != "/mcp":
             self.send_error(404)
@@ -74,11 +76,6 @@ class McpRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Mcp-Session-Id", _session_id)
         self.end_headers()
         self.wfile.write(body)
-
-    def send_response(self, code, message=None):
-        super().send_response(code, message)
-
-        self.send_header("Connection", "close")
 
     def log_message(self, format, *args):
         pass
