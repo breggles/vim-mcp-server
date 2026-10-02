@@ -13,6 +13,7 @@ _session_id = None
 
 class McpRequestHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+    timeout = 120
 
     def do_POST(self):
         if self.path != "/mcp":
