@@ -1,6 +1,7 @@
 import http.client
 import json
 import socket
+import time
 
 import pytest
 
@@ -77,6 +78,33 @@ class TestKeepAlive:
         assert reused
 
 
+class TestNotFound:
+    def setup_method(self):
+        mcp_server.start(0)
+
+        self.port = mcp_server._server.server_address[1]
+
+    def teardown_method(self):
+        mcp_server.stop()
+
+    def test_answers_post_with_large_body(self):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=2)
+
+        large_body = "x" * 1_000_000
+
+        conn.request("POST", "/other", large_body)
+
+        time.sleep(0.2)
+
+        response = conn.getresponse()
+
+        response.read()
+
+        conn.close()
+
+        assert response.status == 404
+
+
 class TestStop:
     def setup_method(self):
         mcp_server.start(0)
@@ -99,7 +127,11 @@ class TestStop:
 
         mcp_server.stop()
 
-        conn.request("POST", "/mcp", body, {"Content-Type": "application/json"})
+        large_body = "x" * 1_000_000
+
+        conn.request("POST", "/mcp", large_body)
+
+        time.sleep(0.2)
 
         second = conn.getresponse()
 

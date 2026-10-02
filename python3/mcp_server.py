@@ -20,6 +20,8 @@ class McpRequestHandler(BaseHTTPRequestHandler):
             return False
 
         if self.server is not _server:
+            self._read_body()
+
             self.send_error(503)
 
             return False
@@ -27,11 +29,10 @@ class McpRequestHandler(BaseHTTPRequestHandler):
         return True
 
     def do_POST(self):
+        body = self._read_body()
         if self.path != "/mcp":
             self.send_error(404)
             return
-        content_length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(content_length)
         try:
             msg = json.loads(body)
         except json.JSONDecodeError:
@@ -78,6 +79,9 @@ class McpRequestHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Length", "0")
         self.end_headers()
+
+    def _read_body(self):
+        return self.rfile.read(int(self.headers.get("Content-Length", 0)))
 
     def _send_json(self, data, status_code):
         body = json.dumps(data).encode("utf-8")
