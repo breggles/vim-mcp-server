@@ -29,6 +29,8 @@ class TestConcurrentConnections:
 
         response = conn.getresponse()
 
+        response.read()
+
         conn.close()
 
         assert response.status == 200
