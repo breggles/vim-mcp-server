@@ -108,6 +108,7 @@ def stop():
     if _server is None:
         return "MCP server is not running"
     _server.shutdown()
+    _server.server_close()
     _server = None
     _server_thread = None
     _session_id = None

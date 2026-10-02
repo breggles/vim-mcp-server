@@ -2,6 +2,8 @@ import http.client
 import json
 import socket
 
+import pytest
+
 import mcp_server
 
 
@@ -106,3 +108,29 @@ class TestStop:
         assert first.status == 200
 
         assert second.status == 503
+
+
+class TestStopReleasesPort:
+    def setup_method(self):
+        mcp_server.start(0)
+
+        self.port = mcp_server._server.server_address[1]
+
+        self.kept = http.client.HTTPConnection("127.0.0.1", self.port, timeout=2)
+
+    def teardown_method(self):
+        self.kept.close()
+
+        mcp_server.stop()
+
+    def test_refuses_new_connection_after_stop_while_connection_is_open(self):
+        body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "ping"})
+
+        self.kept.request("POST", "/mcp", body, {"Content-Type": "application/json"})
+
+        self.kept.getresponse().read()
+
+        mcp_server.stop()
+
+        with pytest.raises(ConnectionRefusedError):
+            socket.create_connection(("127.0.0.1", self.port), timeout=5)
